@@ -1,0 +1,9 @@
+saved_accounts.tfc
+Automap/
+logs/
+.update/
+.tools/
+*.log
+*.pdb
+source-client/build/
+source-client/src/visual-studio/.vs/
