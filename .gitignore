@@ -7,3 +7,4 @@ logs/
 *.pdb
 source-client/build/
 source-client/src/visual-studio/.vs/
+tfc_startup_debug.log
