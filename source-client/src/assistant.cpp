@@ -23,6 +23,7 @@ namespace
 	const Uint32 ASSISTANT_ACTION_DELAY = 650;
 	const Uint32 ASSISTANT_HASTE_DELAY = 2000;
 	const Uint32 ASSISTANT_EQUIPMENT_RETRY_DELAY = 250;
+	const Uint32 ASSISTANT_EQUIPMENT_CONFIRM_DELAY = 1500;
 
 	bool readBool(Config& config, const char* key, bool fallback)
 	{
@@ -302,8 +303,20 @@ void Assistant::tick()
 	if(m_settings.energyRingEnabled && m_settings.energyRingId != 0 && SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
 	{
 		ItemUI* equippedRing = g_game.getInventoryItem(SLOT_RING);
-		if(m_energyRingActive && !equippedRing)
-			m_energyRingActive = false;
+		if(m_energyRingActive)
+		{
+			if(equippedRing)
+				m_energyRingSlotMissingSince = 0;
+			else if(m_energyRingSlotMissingSince == 0)
+				m_energyRingSlotMissingSince = now;
+			else if(SDL_TICKS_PASSED(now, m_energyRingSlotMissingSince + ASSISTANT_EQUIPMENT_CONFIRM_DELAY))
+			{
+				// Equipment moves briefly clear the slot before the transformed ring
+				// arrives. Only forget the latch after the slot stayed empty.
+				m_energyRingActive = false;
+				m_energyRingSlotMissingSince = 0;
+			}
+		}
 
 		if(healthPercent <= m_settings.energyRingEquipPercent && !m_energyRingActive && !isEquipped(SLOT_RING, m_settings.energyRingId))
 		{
@@ -314,6 +327,7 @@ void Assistant::tick()
 				// local latch so that the transformed ring is not replaced every tick,
 				// starving higher-priority healing actions.
 				m_energyRingActive = true;
+				m_energyRingSlotMissingSince = 0;
 				m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
 			}
 			else
@@ -329,13 +343,12 @@ void Assistant::tick()
 				if(actionSent)
 				{
 					m_energyRingActive = false;
+					m_energyRingSlotMissingSince = 0;
 					m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
 				}
 				else
 					m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
 			}
-			else
-				m_energyRingActive = false;
 		}
 	}
 
@@ -391,6 +404,7 @@ void Assistant::resetRuntime()
 	m_nextHaste = 0;
 	m_nextEnergyRingRetry = 0;
 	m_nextAmuletRetry = 0;
+	m_energyRingSlotMissingSince = 0;
 	// Preserve the emergency-ring latch while settings are saved. A normal ring
 	// placed manually must never be classified as an Assistant-equipped ring.
 	if(!g_game.getInventoryItem(SLOT_RING))

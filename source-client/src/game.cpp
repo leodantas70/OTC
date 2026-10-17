@@ -1947,7 +1947,10 @@ void Game::updatePlayerExperienceTable()
 	if(!m_expTable.empty())
 	{
 		std::pair<Uint32, Uint64>& pair = m_expTable.front();
-		double expDiff = SDL_static_cast(double, (m_playerExperience - pair.second));
+		// Experience can be reset while changing character or after reconnecting.
+		// Avoid an unsigned underflow that would otherwise display an absurd XP/h.
+		double expDiff = (m_playerExperience >= pair.second ?
+			SDL_static_cast(double, m_playerExperience - pair.second) : 0.0);
 		double timeDiff = SDL_static_cast(double, (timeStamp - pair.first));
 		m_playerExpSpeed = expDiff / UTIL_max<double>(timeDiff, 1.0);
 	}
@@ -1987,14 +1990,16 @@ void Game::setPlayerCapacity(double capacity, double totalCapacity)
 
 void Game::setPlayerHealth(Uint32 health, Uint32 maxHealth)
 {
-	if(m_playerHealth != health || m_playerMaxHealth != maxHealth)
+	// Some 7.4/7.72 servers occasionally send a transient zero maximum while
+	// refreshing stats. Zero means "not supplied" here, not "full health".
+	Uint32 effectiveMaxHealth = (maxHealth != 0 ? maxHealth : m_playerMaxHealth);
+	if(m_playerHealth != health || m_playerMaxHealth != effectiveMaxHealth)
 	{
 		m_playerHealth = health;
-		m_playerMaxHealth = maxHealth;
-		if(maxHealth == 0)
-			m_playerHealthPercent = 100;
-		else
-			m_playerHealthPercent = SDL_static_cast(Uint8, SDL_static_cast(Uint64, health) * SDL_static_cast(Uint64, 100) / SDL_static_cast(Uint64, maxHealth));
+		m_playerMaxHealth = effectiveMaxHealth;
+		Uint64 healthPercent = (effectiveMaxHealth == 0 ? 0 :
+			SDL_static_cast(Uint64, health) * SDL_static_cast(Uint64, 100) / SDL_static_cast(Uint64, effectiveMaxHealth));
+		m_playerHealthPercent = SDL_static_cast(Uint8, UTIL_min<Uint64>(healthPercent, 100));
 
 		m_cached_stats |= CACHED_STAT_HEALTH;
 	}
@@ -2002,14 +2007,14 @@ void Game::setPlayerHealth(Uint32 health, Uint32 maxHealth)
 
 void Game::setPlayerMana(Uint32 mana, Uint32 maxMana)
 {
-	if(m_playerMana != mana || m_playerMaxMana != maxMana)
+	Uint32 effectiveMaxMana = (maxMana != 0 ? maxMana : m_playerMaxMana);
+	if(m_playerMana != mana || m_playerMaxMana != effectiveMaxMana)
 	{
 		m_playerMana = mana;
-		m_playerMaxMana = maxMana;
-		if(maxMana == 0)
-			m_playerManaPercent = 100;
-		else
-			m_playerManaPercent = SDL_static_cast(Uint8, SDL_static_cast(Uint64, mana) * SDL_static_cast(Uint64, 100) / SDL_static_cast(Uint64, maxMana));
+		m_playerMaxMana = effectiveMaxMana;
+		Uint64 manaPercent = (effectiveMaxMana == 0 ? 0 :
+			SDL_static_cast(Uint64, mana) * SDL_static_cast(Uint64, 100) / SDL_static_cast(Uint64, effectiveMaxMana));
+		m_playerManaPercent = SDL_static_cast(Uint8, UTIL_min<Uint64>(manaPercent, 100));
 
 		m_cached_stats |= CACHED_STAT_MANA;
 	}

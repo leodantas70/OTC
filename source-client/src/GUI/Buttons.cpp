@@ -93,7 +93,7 @@ bool CheckVIPWindowOpen() {return g_haveVIPOpen;}
 bool CheckUnjustifiedWindowOpen() {return false;}
 bool CheckPreyWindowOpen() {return false;}
 bool CheckSpellsWindowOpen() {return false;}
-bool CheckAnalyticsWindowOpen() {return false;}
+bool CheckAnalyticsWindowOpen() {return g_haveSkillsOpen;}
 bool CheckLeaderboardWindowOpen() {return false;}
 bool CheckPartyWindowOpen() {return g_havePartyOpen;}
 
@@ -114,7 +114,7 @@ void buttons_Events(Uint32 event, Sint32)
 		case BUTTONS_COMPENDIUM_EVENTID: break;
 		case BUTTONS_REWARDWALL_EVENTID: break;
 		case BUTTONS_CYCLOPEDIA_EVENTID: break;
-		case BUTTONS_ANALYTICS_EVENTID: break;
+		case BUTTONS_ANALYTICS_EVENTID: UTIL_toggleSkillsWindow(); break;
 		case BUTTONS_TOURNAMENT_EVENTID: break;
 		case BUTTONS_LEADERBOARD_EVENTID: break;
 		case BUTTONS_FRIENDS_EVENTID: break;

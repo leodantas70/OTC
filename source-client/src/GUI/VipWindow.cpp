@@ -134,6 +134,7 @@
 #define VIP_POPUP_REPORT_NAME 2014
 #define VIP_POPUP_COPY_NAME 2015
 #define VIP_POPUP_RULE_VIOLATION 2016
+#define VIP_POPUP_EXIVA_PLAYER 2017
 
 extern Engine g_engine;
 extern Game g_game;
@@ -409,6 +410,25 @@ void vip_Events(Uint32 event, Sint32 status)
 						g_chat.openPrivateChannel(vipPlayer.playerName);
 						g_engine.enableTemporaryChatInput();
 						g_game.sendOpenPrivateChannel(vipPlayer.playerName);
+						break;
+					}
+				}
+			}
+		}
+		break;
+		case VIP_POPUP_EXIVA_PLAYER:
+		{
+			GUI_PanelWindow* pPanel;
+			if(g_lastVipAction.type == VIP_ACTION_PLAYER && (pPanel = g_engine.getPanel(GUI_PANEL_WINDOW_VIP)) != NULL)
+			{
+				for(std::vector<VipPlayers>::iterator it = g_vipPlayers.begin(), end = g_vipPlayers.end(); it != end; ++it)
+				{
+					VipPlayers& vipPlayer = (*it);
+					if(vipPlayer.playerGUID == g_lastVipAction.player.playerGUID)
+					{
+						std::string spell("exiva \"");
+						spell.append(vipPlayer.playerName);
+						g_game.sendSay(MessageSay, 0, std::string(), spell);
 						break;
 					}
 				}
@@ -891,6 +911,8 @@ void UTIL_createVipPopupMenu(Sint32 x, Sint32 y, VipAction& action)
 				newMenu->addContextMenu(CONTEXTMENU_STYLE_STANDARD, VIP_POPUP_REMOVE_PLAYER, g_buffer, "");
 				SDL_snprintf(g_buffer, sizeof(g_buffer), "Message to %s", vipPlayer.playerName.c_str());
 				newMenu->addContextMenu(CONTEXTMENU_STYLE_STANDARD, VIP_POPUP_MESSAGE_PLAYER, g_buffer, "");
+				SDL_snprintf(g_buffer, sizeof(g_buffer), "Exiva %s", vipPlayer.playerName.c_str());
+				newMenu->addContextMenu(CONTEXTMENU_STYLE_STANDARD, VIP_POPUP_EXIVA_PLAYER, g_buffer, "");
 				break;
 			}
 		}

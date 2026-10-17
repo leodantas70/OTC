@@ -18,7 +18,11 @@ As configuracoes sao salvas em `assistant.cfg`, na mesma pasta de preferencias u
 - Haste automatica quando o icone de haste nao estiver ativo.
 - Mana fluid abaixo da porcentagem configurada.
 - Runa de ataque no alvo de batalha atual por uma tecla configuravel (F8 por padrao).
+- Energy ring de emergencia, com troca rapida e retirada automatica acima da porcentagem configurada.
 - Full light com restauracao do modo de luz anterior ao desligar ou fechar o cliente.
+- `EXP/hour` visivel no painel Skills; o botao Analytics tambem abre esse painel quando estiver disponivel no layout.
+- `Exiva Nome` no menu de contexto ao clicar com o botao direito em um jogador da VIP.
+- A mao do inventario alterna o Secure Mode (PvP) usando o protocolo compativel com 7.72.
 
 ## Observacoes
 

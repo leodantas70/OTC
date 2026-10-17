@@ -1348,6 +1348,7 @@ void Engine::updateThink()
 	//Event that get called by every 5 seconds
 	checkReleaseQueue();
 	g_game.updatePlayerExperienceTable();
+	UTIL_updateSkillsWindowStats();
 	g_game.sendPing();
 }
 

@@ -107,6 +107,8 @@
 #define SKILLS_MANA_CHANCE_EVENTID 1126
 #define SKILLS_MANA_AMOUNT_TITLE "Amount"
 #define SKILLS_MANA_AMOUNT_EVENTID 1127
+#define SKILLS_EXPHOUR_TITLE "EXP/hour"
+#define SKILLS_EXPHOUR_EVENTID 1128
 
 #define SKILLS_POPUP_RESETEXP "Reset Experience Counter"
 #define SKILLS_POPUP_RESETEXP_EVENTID 2000
@@ -489,6 +491,13 @@ std::string getSkillData(Uint32 skillId)
 			result = UTIL_formatStringCommas(std::string(g_buffer, SDL_static_cast(size_t, len)));
 		}
 		break;
+		case SKILLS_EXPHOUR_EVENTID:
+		{
+			Uint64 experiencePerHour = SDL_static_cast(Uint64, g_game.getPlayerExperienceSpeed() * 3600.0);
+			Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%" SDL_PRIu64, experiencePerHour);
+			result = UTIL_formatStringCommas(std::string(g_buffer, SDL_static_cast(size_t, len)));
+		}
+		break;
 		case SKILLS_XPGAIN_EVENTID:
 		{
 			Uint32 percent = getSkillXPGainRate();
@@ -671,6 +680,11 @@ void UTIL_recreateSkillsWindow(GUI_SkillsContainer* container)
 	newDescription = new GUI_SkillDescription(iRect(10, PosY, 135, 12), SKILLS_EXPERIENCE_EVENTID);
 	newDescription->setName(false, SKILLS_EXPERIENCE_TITLE);
 	newDescription->setName(true, std::move(getSkillData(SKILLS_EXPERIENCE_EVENTID)));
+	container->addChild(newDescription, false);
+	PosY += 14;
+	newDescription = new GUI_SkillDescription(iRect(10, PosY, 135, 12), SKILLS_EXPHOUR_EVENTID);
+	newDescription->setName(false, SKILLS_EXPHOUR_TITLE);
+	newDescription->setName(true, std::move(getSkillData(SKILLS_EXPHOUR_EVENTID)));
 	container->addChild(newDescription, false);
 	PosY += 14;
 	newDescription = new GUI_SkillDescription(iRect(10, PosY, 135, 12), SKILLS_XPGAIN_EVENTID);
@@ -1055,6 +1069,12 @@ void UTIL_updateSkillsWindowStats()
 		if(pDescription)
 			pDescription->setName(true, std::move(getSkillData(SKILLS_EXPERIENCE_EVENTID)));
 	}
+
+	// XP/hour is calculated locally every five seconds, independently from a
+	// new server stats packet, so keep the visible value fresh every update.
+	pDescription = SDL_static_cast(GUI_SkillDescription*, container->getChild(SKILLS_EXPHOUR_EVENTID));
+	if(pDescription)
+		pDescription->setName(true, std::move(getSkillData(SKILLS_EXPHOUR_EVENTID)));
 
 	if(g_game.hasCachedStat(CACHED_STAT_XPGAIN))
 	{
