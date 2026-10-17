@@ -22,7 +22,7 @@
 #include <unordered_map>
 
 #define CAVEBOT_OPTIONS_WIDTH 580
-#define CAVEBOT_OPTIONS_HEIGHT 666
+#define CAVEBOT_OPTIONS_HEIGHT 742
 
 #define CAVEBOT_CANCEL_EVENTID 1000
 #define CAVEBOT_OK_EVENTID 1001
@@ -51,6 +51,7 @@
 #define CAVEBOT_LOOT_GOLD_EVENTID 1109
 #define CAVEBOT_LOOT_AFTER_KILL_EVENTID 1110
 #define CAVEBOT_BURST_ARROW_EVENTID 1111
+#define CAVEBOT_DROP_LOOT_NO_CAP_EVENTID 1112
 
 #define CAVEBOT_REACH_EVENTID 1200
 #define CAVEBOT_RETRY_EVENTID 1201
@@ -401,12 +402,13 @@ namespace
 		if(movementList)
 		{
 			Sint32 selection = movementList->getSelect();
-			settings.targetMovement = (selection == 0 ? CAVEBOT_TARGET_FOLLOW :
-				selection == 2 ? CAVEBOT_TARGET_DIAGONAL : CAVEBOT_TARGET_STAND);
+			if(selection >= CAVEBOT_TARGET_STAND && selection <= CAVEBOT_TARGET_DIAGONAL_DISTANCE_5)
+				settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, selection);
 		}
 		settings.lootEnabled = getChecked(window, CAVEBOT_LOOT_ENABLED_EVENTID);
 		settings.lootGold = getChecked(window, CAVEBOT_LOOT_GOLD_EVENTID);
 		settings.lootAfterKill = getChecked(window, CAVEBOT_LOOT_AFTER_KILL_EVENTID);
+		settings.dropLootNoCapacity = getChecked(window, CAVEBOT_DROP_LOOT_NO_CAP_EVENTID);
 		settings.lootItemIds = getText(window, CAVEBOT_LOOT_IDS_EVENTID);
 		settings.lootDestinationContainer = SDL_static_cast(Uint8, getNumber(window, CAVEBOT_LOOT_DESTINATION_EVENTID, GAME_MAX_CONTAINERS - 1));
 		settings.playerAlertEnabled = getChecked(window, CAVEBOT_ALERT_ENABLED_EVENTID);
@@ -474,7 +476,7 @@ void caveBotLootItems_Events(Uint32 event, Sint32 status)
 	}
 }
 
-void caveBotOptions_Events(Uint32 event, Sint32)
+void caveBotOptions_Events(Uint32 event, Sint32 status)
 {
 	GUI_Window* window = g_engine.getCurrentWindow();
 	if(!window || window->getInternalID() != GUI_WINDOW_CAVEBOTOPTIONS)
@@ -496,6 +498,25 @@ void caveBotOptions_Events(Uint32 event, Sint32)
 	if(event == CAVEBOT_LOOT_ITEM_LIST_EVENTID)
 	{
 		openLootItemCatalog();
+		return;
+	}
+	if(event == CAVEBOT_WAYPOINT_LIST_EVENTID)
+	{
+		if(status < 0)
+		{
+			Sint32 waypointIndex = ~status;
+			if(waypointIndex >= 0 && SDL_static_cast(size_t, waypointIndex) < g_caveBot.getWaypoints().size())
+			{
+				g_caveBot.setCurrentWaypoint(SDL_static_cast(size_t, waypointIndex));
+				GUI_ListBox* waypointList = SDL_static_cast(GUI_ListBox*, window->getChild(CAVEBOT_WAYPOINT_LIST_EVENTID));
+				if(waypointList)
+				{
+					for(size_t i = 0; i < g_caveBot.getWaypoints().size(); ++i)
+						waypointList->set(SDL_static_cast(Sint32, i), g_caveBot.waypointDescription(i));
+					waypointList->setSelect(waypointIndex);
+				}
+			}
+		}
 		return;
 	}
 
@@ -599,6 +620,9 @@ void UTIL_caveBotOptions()
 	GUI_ListBox* list = new GUI_ListBox(iRect(18, 130, CAVEBOT_OPTIONS_WIDTH - 36, 130), CAVEBOT_WAYPOINT_LIST_EVENTID);
 	for(size_t i = 0; i < g_caveBot.getWaypoints().size(); ++i)
 		list->add(g_caveBot.waypointDescription(i));
+	if(!g_caveBot.getWaypoints().empty())
+		list->setSelect(SDL_static_cast(Sint32, g_caveBot.getCurrentWaypoint()));
+	list->setEventCallback(&caveBotOptions_Events, CAVEBOT_WAYPOINT_LIST_EVENTID);
 	list->startEvents();
 	window->addChild(list);
 	addButton(window, 18, 270, "Add Walk", CAVEBOT_ADD_WALK_EVENTID);
@@ -632,33 +656,37 @@ void UTIL_caveBotOptions()
 	addLabel(window, 240, 416, "Intervalo (ms):");
 	addTextBox(window, 327, 412, 65, numberText(settings.attackDelay), CAVEBOT_ATTACK_DELAY_EVENTID, 5, true);
 	addLabel(window, 18, 449, "Movimento:");
-	GUI_ListBox* movementList = new GUI_ListBox(iRect(88, 438, 180, 43), CAVEBOT_TARGET_MOVEMENT_LIST_EVENTID);
-	movementList->add("Seguir o alvo");
+	GUI_ListBox* movementList = new GUI_ListBox(iRect(88, 438, 180, 91), CAVEBOT_TARGET_MOVEMENT_LIST_EVENTID);
 	movementList->add("Atacar parado");
+	movementList->add("Seguir o alvo");
 	movementList->add("Manter diagonal");
-	Sint32 movementSelection = (settings.targetMovement == CAVEBOT_TARGET_FOLLOW ? 0 : settings.targetMovement == CAVEBOT_TARGET_DIAGONAL ? 2 : 1);
-	movementList->setSelect(movementSelection);
+	movementList->add("Parado + diagonal");
+	movementList->add("Diagonal 3 SQM");
+	movementList->add("Diagonal 4 SQM");
+	movementList->add("Diagonal 5 SQM");
+	movementList->setSelect(SDL_static_cast(Sint32, settings.targetMovement));
 	movementList->startEvents();
 	window->addChild(movementList);
 	window->addChild(new GUI_Label(iRect(285, 443, 0, 0), "Escolha como o personagem se posiciona durante o combate."));
-	window->addChild(new GUI_Separator(iRect(13, 486, CAVEBOT_OPTIONS_WIDTH - 26, 2)));
+	window->addChild(new GUI_Separator(iRect(13, 534, CAVEBOT_OPTIONS_WIDTH - 26, 2)));
 
-	addCheckBox(window, 18, 494, 120, "Auto Loot", settings.lootEnabled, CAVEBOT_LOOT_ENABLED_EVENTID);
-	addCheckBox(window, 145, 494, 100, "Loot gold", settings.lootGold, CAVEBOT_LOOT_GOLD_EVENTID);
-	addLabel(window, 255, 499, "IDs adicionais:");
-	addTextBox(window, 340, 495, 220, settings.lootItemIds, CAVEBOT_LOOT_IDS_EVENTID, 300);
-	addLabel(window, 18, 526, "Mochila destino aberta (0-15):");
-	addTextBox(window, 189, 522, 35, numberText(settings.lootDestinationContainer), CAVEBOT_LOOT_DESTINATION_EVENTID, 2, true);
-	addCheckBox(window, 245, 520, 150, "Loot after kill", settings.lootAfterKill, CAVEBOT_LOOT_AFTER_KILL_EVENTID);
-	addButton(window, 474, 518, "Lista itens", CAVEBOT_LOOT_ITEM_LIST_EVENTID);
-	window->addChild(new GUI_Separator(iRect(13, 548, CAVEBOT_OPTIONS_WIDTH - 26, 2)));
+	addCheckBox(window, 18, 542, 120, "Auto Loot", settings.lootEnabled, CAVEBOT_LOOT_ENABLED_EVENTID);
+	addCheckBox(window, 145, 542, 100, "Loot gold", settings.lootGold, CAVEBOT_LOOT_GOLD_EVENTID);
+	addLabel(window, 255, 547, "IDs adicionais:");
+	addTextBox(window, 340, 543, 220, settings.lootItemIds, CAVEBOT_LOOT_IDS_EVENTID, 300);
+	addLabel(window, 18, 574, "Mochila destino aberta (0-15):");
+	addTextBox(window, 189, 570, 35, numberText(settings.lootDestinationContainer), CAVEBOT_LOOT_DESTINATION_EVENTID, 2, true);
+	addCheckBox(window, 245, 568, 150, "Loot after kill", settings.lootAfterKill, CAVEBOT_LOOT_AFTER_KILL_EVENTID);
+	addButton(window, 474, 566, "Lista itens", CAVEBOT_LOOT_ITEM_LIST_EVENTID);
+	addCheckBox(window, 18, 594, 300, "Jogar loot no chao sem cap", settings.dropLootNoCapacity, CAVEBOT_DROP_LOOT_NO_CAP_EVENTID);
+	window->addChild(new GUI_Separator(iRect(13, 622, CAVEBOT_OPTIONS_WIDTH - 26, 2)));
 
-	addCheckBox(window, 18, 556, 145, "Alerta de player", settings.playerAlertEnabled, CAVEBOT_ALERT_ENABLED_EVENTID);
-	addCheckBox(window, 180, 556, 190, "Pausar rota", settings.pauseOnPlayer, CAVEBOT_PAUSE_PLAYER_EVENTID);
-	addCheckBox(window, 380, 556, 180, "Auto burst arrow", settings.burstArrowEnabled, CAVEBOT_BURST_ARROW_EVENTID);
-	addLabel(window, 18, 589, "Ignorar nomes:");
-	addTextBox(window, 104, 585, 456, settings.ignoredPlayers, CAVEBOT_IGNORED_PLAYERS_EVENTID, 250);
-	addLabel(window, 18, 611, "Record grava cada SQM ao caminhar. Add Exani executa exani tera exatamente no SQM marcado.");
+	addCheckBox(window, 18, 630, 145, "Alerta de player", settings.playerAlertEnabled, CAVEBOT_ALERT_ENABLED_EVENTID);
+	addCheckBox(window, 180, 630, 190, "Pausar rota", settings.pauseOnPlayer, CAVEBOT_PAUSE_PLAYER_EVENTID);
+	addCheckBox(window, 380, 630, 180, "Auto burst arrow", settings.burstArrowEnabled, CAVEBOT_BURST_ARROW_EVENTID);
+	addLabel(window, 18, 663, "Ignorar nomes:");
+	addTextBox(window, 104, 659, 456, settings.ignoredPlayers, CAVEBOT_IGNORED_PLAYERS_EVENTID, 250);
+	addLabel(window, 18, 685, "Record grava cada SQM ao caminhar. Dois cliques selecionam o waypoint atual.");
 
 	window->addChild(new GUI_Separator(iRect(13, CAVEBOT_OPTIONS_HEIGHT - 40, CAVEBOT_OPTIONS_WIDTH - 26, 2)));
 	GUI_Button* button = new GUI_Button(iRect(CAVEBOT_OPTIONS_WIDTH - 109, CAVEBOT_OPTIONS_HEIGHT - 30, GUI_UI_BUTTON_43PX_GREEN_UP_W, GUI_UI_BUTTON_43PX_GREEN_UP_H), "Salvar", CLIENT_GUI_ENTER_TRIGGER);

@@ -19,6 +19,13 @@
 #include <cctype>
 #include <sstream>
 
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#endif
+
 extern Engine g_engine;
 extern Game g_game;
 extern Map g_map;
@@ -134,10 +141,11 @@ void CaveBot::loadConfig()
 		settings.attackRuneId = SDL_static_cast(Uint16, readNumber(config, "AttackRuneId", settings.attackRuneId, 65535));
 		settings.attackRuneSubtype = SDL_static_cast(Uint8, readNumber(config, "AttackRuneSubtype", settings.attackRuneSubtype, 255));
 		settings.attackDelay = readNumber(config, "AttackDelay", settings.attackDelay, 10000);
-		settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, readNumber(config, "TargetMovement", settings.targetMovement, CAVEBOT_TARGET_DIAGONAL));
+		settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, readNumber(config, "TargetMovement", settings.targetMovement, CAVEBOT_TARGET_DIAGONAL_DISTANCE_5));
 		settings.lootEnabled = readBool(config, "LootEnabled", settings.lootEnabled);
 		settings.lootGold = readBool(config, "LootGold", settings.lootGold);
 		settings.lootAfterKill = readBool(config, "LootAfterKill", settings.lootAfterKill);
+		settings.dropLootNoCapacity = readBool(config, "DropLootNoCapacity", settings.dropLootNoCapacity);
 		settings.lootItemIds = readText(config, "LootItemIds", settings.lootItemIds);
 		settings.lootDestinationContainer = SDL_static_cast(Uint8, readNumber(config, "LootDestination", settings.lootDestinationContainer, GAME_MAX_CONTAINERS - 1));
 		settings.playerAlertEnabled = readBool(config, "PlayerAlertEnabled", settings.playerAlertEnabled);
@@ -162,6 +170,19 @@ void CaveBot::loadConfig()
 			if(fields.size() >= 8)
 				waypoint.text = fields[7];
 			waypoints.push_back(waypoint);
+		}
+
+		// Kept in a separate key so old waypoint files (whose final text field may
+		// contain commas) remain fully compatible.
+		StringVector savedTargetItems = config.fetchKeys("WaypointTargetItem");
+		for(const std::string& encoded : savedTargetItems)
+		{
+			std::vector<std::string> fields = split(encoded, ',', 2);
+			if(fields.size() != 2)
+				continue;
+			size_t index = SDL_static_cast(size_t, SDL_strtoul(fields[0].c_str(), NULL, 10));
+			if(index < waypoints.size())
+				waypoints[index].targetItemId = SDL_static_cast(Uint16, SDL_strtoul(fields[1].c_str(), NULL, 10));
 		}
 	}
 
@@ -192,6 +213,7 @@ void CaveBot::saveConfig()
 	config.insertKey("LootEnabled", boolText(m_settings.lootEnabled));
 	config.insertKey("LootGold", boolText(m_settings.lootGold));
 	config.insertKey("LootAfterKill", boolText(m_settings.lootAfterKill));
+	config.insertKey("DropLootNoCapacity", boolText(m_settings.dropLootNoCapacity));
 	config.insertKey("LootItemIds", m_settings.lootItemIds);
 	config.insertKey("LootDestination", numberText(m_settings.lootDestinationContainer));
 	config.insertKey("PlayerAlertEnabled", boolText(m_settings.playerAlertEnabled));
@@ -200,28 +222,62 @@ void CaveBot::saveConfig()
 	config.insertKey("BurstArrowEnabled", boolText(m_settings.burstArrowEnabled));
 	config.insertNewLine();
 
-	for(const CaveBotWaypoint& waypoint : m_waypoints)
+	for(size_t index = 0; index < m_waypoints.size(); ++index)
 	{
+		const CaveBotWaypoint& waypoint = m_waypoints[index];
 		std::ostringstream stream;
 		stream << SDL_static_cast(Uint32, waypoint.action) << ',' << waypoint.position.x << ',' << waypoint.position.y << ','
 			<< SDL_static_cast(Uint32, waypoint.position.z) << ',' << waypoint.itemId << ',' << SDL_static_cast(Uint32, waypoint.itemSubtype)
 			<< ',' << waypoint.delay << ',' << waypoint.text;
 		config.insertKey("Waypoint", stream.str());
+		if(waypoint.targetItemId != 0)
+		{
+			std::ostringstream targetStream;
+			targetStream << index << ',' << waypoint.targetItemId;
+			config.insertKey("WaypointTargetItem", targetStream.str());
+		}
 	}
 }
 
 void CaveBot::applySettings(const CaveBotSettings& settings)
 {
 	bool recordChanged = (m_settings.recordEnabled != settings.recordEnabled);
+	size_t currentWaypoint = m_currentWaypoint;
 	m_settings = settings;
 	m_settings.reachDistance = UTIL_min<Uint8>(5, m_settings.reachDistance);
 	m_settings.retryDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.retryDelay));
 	m_settings.attackDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.attackDelay));
-	if(m_settings.targetMovement > CAVEBOT_TARGET_DIAGONAL)
+	if(m_settings.targetMovement > CAVEBOT_TARGET_DIAGONAL_DISTANCE_5)
 		m_settings.targetMovement = CAVEBOT_TARGET_STAND;
 	resetRuntime();
+	if(currentWaypoint < m_waypoints.size())
+		m_currentWaypoint = currentWaypoint;
 	if(recordChanged)
 		m_recordPositionValid = false;
+}
+
+void CaveBot::setCurrentWaypoint(size_t index)
+{
+	if(index >= m_waypoints.size())
+		return;
+	g_game.stopAutoWalk();
+	m_currentWaypoint = index;
+	m_nextWalkAction = 0;
+	m_lastWalkRequest = 0;
+	m_walkPositionValid = false;
+	if(g_engine.isIngame())
+		g_game.processTextMessage(MessageLogin, std::string("CaveBot: waypoint selecionado: ") + numberText(SDL_static_cast(Uint32, index + 1)) + ".");
+}
+
+void CaveBot::notifyUserInput()
+{
+	Uint32 now = SDL_GetTicks();
+	if(m_playerAlertSoundUntil == 0 || SDL_TICKS_PASSED(now, m_playerAlertSoundUntil))
+		return;
+	if(m_playerAlertMutedUntil != 0 && !SDL_TICKS_PASSED(now, m_playerAlertMutedUntil))
+		return;
+	m_playerAlertSoundUntil = 0;
+	m_playerAlertMutedUntil = now + 60000;
 }
 
 void CaveBot::setEnabled(bool enabled)
@@ -241,10 +297,17 @@ void CaveBot::resetRuntime()
 	m_lastWalkRequest = 0;
 	m_walkNoProgressSince = 0;
 	m_walkPositionValid = false;
+	m_floorTransitionPending = false;
+	m_floorTransitionSourceZ = 0;
+	m_floorTransitionSince = 0;
 	m_nextTargetAction = 0;
 	m_nextTargetMovement = 0;
 	m_nextLootAction = 0;
 	m_nextPlayerAlert = 0;
+	m_nextPlayerAlertBeep = 0;
+	m_playerAlertSoundUntil = 0;
+	m_playerAlertMutedUntil = 0;
+	m_playerAlertWasDetected = false;
 	m_nextBurstArrowRetry = 0;
 	m_lootCorpseContainer = 0xFF;
 	m_lootBagContainer = 0xFF;
@@ -272,6 +335,68 @@ void CaveBot::notifyCreatureDeath(Uint32 creatureId, const Position& position)
 	target.position = position;
 	target.queuedAt = SDL_GetTicks();
 	m_lootTargets.push_back(target);
+}
+
+void CaveBot::notifyManualUse(const Position& targetPosition, Uint16 targetItemId)
+{
+	if(!m_configLoaded || !m_settings.recordEnabled || targetPosition.x == 0xFFFF || targetItemId == 0)
+		return;
+
+	CaveBotWaypoint waypoint;
+	waypoint.position = targetPosition;
+	waypoint.action = CAVEBOT_USE;
+	waypoint.targetItemId = targetItemId;
+	waypoint.delay = 300;
+	m_waypoints.push_back(waypoint);
+	m_recordDirty = true;
+	UTIL_caveBotWaypointRecorded(waypointDescription(m_waypoints.size() - 1));
+}
+
+void CaveBot::notifyManualUseWith(const Position& sourcePosition, Uint16 sourceItemId,
+	const Position& targetPosition, Uint16 targetItemId)
+{
+	if(!m_configLoaded || !m_settings.recordEnabled || targetPosition.x == 0xFFFF ||
+		sourceItemId == 0 || targetItemId == 0)
+		return;
+
+	Uint8 sourceSubtype = 0;
+	if(sourcePosition.x == 0xFFFF)
+	{
+		for(Uint8 slot = SLOT_HEAD; slot < SLOT_LAST; ++slot)
+		{
+			ItemUI* item = g_game.getInventoryItem(slot);
+			if(item && item->getID() == sourceItemId && item->getCurrentPosition() == sourcePosition)
+			{
+				sourceSubtype = item->getItemSubtype();
+				break;
+			}
+		}
+		for(Uint8 containerId = 0; sourceSubtype == 0 && containerId < GAME_MAX_CONTAINERS; ++containerId)
+		{
+			Container* container = g_game.findContainer(containerId);
+			if(!container)
+				continue;
+			for(ItemUI* item : container->getItems())
+			{
+				if(item && item->getID() == sourceItemId && item->getCurrentPosition() == sourcePosition)
+				{
+					sourceSubtype = item->getItemSubtype();
+					break;
+				}
+			}
+		}
+	}
+
+	CaveBotWaypoint waypoint;
+	waypoint.position = targetPosition;
+	waypoint.action = CAVEBOT_USE;
+	waypoint.itemId = sourceItemId;
+	waypoint.targetItemId = targetItemId;
+	waypoint.itemSubtype = sourceSubtype;
+	waypoint.delay = 300;
+	m_waypoints.push_back(waypoint);
+	m_recordDirty = true;
+	UTIL_caveBotWaypointRecorded(waypointDescription(m_waypoints.size() - 1));
 }
 
 void CaveBot::addWaypoint(const CaveBotWaypoint& waypoint)
@@ -334,9 +459,21 @@ std::string CaveBot::waypointDescription(size_t index) const
 		default: break;
 	}
 	char buffer[256];
-	SDL_snprintf(buffer, sizeof(buffer), "%02u. %-5s  %u,%u,%u%s", SDL_static_cast(Uint32, index + 1), action,
-		waypoint.position.x, waypoint.position.y, waypoint.position.z,
-		(index == m_currentWaypoint ? "  <" : ""));
+	if(waypoint.action == CAVEBOT_USE && waypoint.targetItemId != 0)
+	{
+		if(waypoint.itemId != 0)
+			SDL_snprintf(buffer, sizeof(buffer), "%02u. %-5s  %u,%u,%u  ID:%u->%u%s", SDL_static_cast(Uint32, index + 1), action,
+				waypoint.position.x, waypoint.position.y, waypoint.position.z, waypoint.itemId, waypoint.targetItemId,
+				(index == m_currentWaypoint ? "  <" : ""));
+		else
+			SDL_snprintf(buffer, sizeof(buffer), "%02u. %-5s  %u,%u,%u  ID:%u%s", SDL_static_cast(Uint32, index + 1), action,
+				waypoint.position.x, waypoint.position.y, waypoint.position.z, waypoint.targetItemId,
+				(index == m_currentWaypoint ? "  <" : ""));
+	}
+	else
+		SDL_snprintf(buffer, sizeof(buffer), "%02u. %-5s  %u,%u,%u%s", SDL_static_cast(Uint32, index + 1), action,
+			waypoint.position.x, waypoint.position.y, waypoint.position.z,
+			(index == m_currentWaypoint ? "  <" : ""));
 	return std::string(buffer);
 }
 
@@ -394,6 +531,9 @@ bool CaveBot::matchesNameList(const std::string& name, const std::string& list, 
 
 void CaveBot::updatePlayerAlert(Uint32 now)
 {
+	if(m_playerAlertSoundUntil != 0 && SDL_TICKS_PASSED(now, m_playerAlertSoundUntil))
+		m_playerAlertSoundUntil = 0;
+	bool wasDetected = m_playerAlertWasDetected;
 	m_playerDetected = false;
 	Creature* local = g_map.getLocalCreature();
 	if(!m_settings.playerAlertEnabled || !local)
@@ -409,6 +549,25 @@ void CaveBot::updatePlayerAlert(Uint32 now)
 			continue;
 
 		m_playerDetected = true;
+		if(!wasDetected && SDL_TICKS_PASSED(now, m_playerAlertMutedUntil))
+		{
+			m_playerAlertSoundUntil = now + 5000;
+			m_nextPlayerAlertBeep = 0;
+		}
+		else if(m_playerAlertMutedUntil != 0 && SDL_TICKS_PASSED(now, m_playerAlertMutedUntil))
+		{
+			m_playerAlertMutedUntil = 0;
+			m_playerAlertSoundUntil = now + 5000;
+			m_nextPlayerAlertBeep = 0;
+		}
+		if(m_playerAlertSoundUntil != 0 && !SDL_TICKS_PASSED(now, m_playerAlertSoundUntil) &&
+			SDL_TICKS_PASSED(now, m_nextPlayerAlertBeep))
+		{
+#ifdef _WIN32
+			MessageBeep(MB_ICONEXCLAMATION);
+#endif
+			m_nextPlayerAlertBeep = now + 650;
+		}
 		if(now >= m_nextPlayerAlert)
 		{
 			g_game.processTextMessage(MessageWarning, std::string("ALERTA: jogador na tela: ") + creature->getName());
@@ -417,6 +576,9 @@ void CaveBot::updatePlayerAlert(Uint32 now)
 		}
 		break;
 	}
+	m_playerAlertWasDetected = m_playerDetected;
+	if(!m_playerDetected)
+		m_playerAlertSoundUntil = 0;
 }
 
 void CaveBot::updateTargetBot(Uint32 now)
@@ -502,7 +664,12 @@ void CaveBot::updateTargetMovement(Uint32 now)
 		g_game.sendAttackModes();
 	}
 
-	if(m_settings.targetMovement != CAVEBOT_TARGET_DIAGONAL)
+	bool diagonalMovement = (m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL ||
+		m_settings.targetMovement == CAVEBOT_TARGET_STAND_DIAGONAL ||
+		m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_3 ||
+		m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_4 ||
+		m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_5);
+	if(!diagonalMovement)
 	{
 		if(m_targetMovementWalking)
 			g_game.stopAutoWalk();
@@ -516,7 +683,24 @@ void CaveBot::updateTargetMovement(Uint32 now)
 	Position targetPosition = target->getCurrentPosition();
 	Sint32 deltaX = Position::getDistanceX(current, targetPosition);
 	Sint32 deltaY = Position::getDistanceY(current, targetPosition);
-	if(deltaX == 1 && deltaY == 1)
+
+	Sint32 wantedDistance = 1;
+	if(m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_3)
+		wantedDistance = 3;
+	else if(m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_4)
+		wantedDistance = 4;
+	else if(m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_5)
+		wantedDistance = 5;
+
+	if(m_settings.targetMovement == CAVEBOT_TARGET_STAND_DIAGONAL && UTIL_max<Sint32>(deltaX, deltaY) > 1)
+	{
+		if(m_targetMovementWalking)
+			g_game.stopAutoWalk();
+		m_targetMovementWalking = false;
+		m_nextTargetMovement = now + 150;
+		return;
+	}
+	if(deltaX == wantedDistance && deltaY == wantedDistance)
 	{
 		if(m_targetMovementWalking)
 			g_game.stopAutoWalk();
@@ -531,13 +715,13 @@ void CaveBot::updateTargetMovement(Uint32 now)
 	bool found = false;
 	for(size_t i = 0; i < 4; ++i)
 	{
-		Sint32 candidateX = SDL_static_cast(Sint32, targetPosition.x) + diagonalOffsets[i][0];
-		Sint32 candidateY = SDL_static_cast(Sint32, targetPosition.y) + diagonalOffsets[i][1];
+		Sint32 candidateX = SDL_static_cast(Sint32, targetPosition.x) + diagonalOffsets[i][0] * wantedDistance;
+		Sint32 candidateY = SDL_static_cast(Sint32, targetPosition.y) + diagonalOffsets[i][1] * wantedDistance;
 		if(candidateX < 0 || candidateX > 65535 || candidateY < 0 || candidateY > 65535)
 			continue;
 		Position candidate(SDL_static_cast(Uint16, candidateX), SDL_static_cast(Uint16, candidateY), targetPosition.z);
 		Tile* tile = g_map.getTile(candidate);
-		if(!tile || !tile->isWalkable())
+		if(!tile || !tile->isWalkable() || tile->hasFloorChangeRisk() || tile->getTopCreature())
 			continue;
 		Sint32 distance = UTIL_max<Sint32>(Position::getDistanceX(current, candidate), Position::getDistanceY(current, candidate));
 		if(distance < bestDistance)
@@ -548,10 +732,49 @@ void CaveBot::updateTargetMovement(Uint32 now)
 		}
 	}
 
+	// Se as quatro diagonais exatas estiverem bloqueadas por paredes, buracos ou
+	// criaturas, procure um SQM seguro imediatamente ao redor delas. Isso evita
+	// repetir para sempre um destino impossivel durante o combate.
+	if(!found)
+	{
+		Sint32 bestFallbackScore = 0x7FFFFFFF;
+		for(size_t i = 0; i < 4; ++i)
+		{
+			Sint32 cornerX = SDL_static_cast(Sint32, targetPosition.x) + diagonalOffsets[i][0] * wantedDistance;
+			Sint32 cornerY = SDL_static_cast(Sint32, targetPosition.y) + diagonalOffsets[i][1] * wantedDistance;
+			for(Sint32 offsetX = -1; offsetX <= 1; ++offsetX)
+			{
+				for(Sint32 offsetY = -1; offsetY <= 1; ++offsetY)
+				{
+					Sint32 candidateX = cornerX + offsetX;
+					Sint32 candidateY = cornerY + offsetY;
+					if(candidateX < 0 || candidateX > 65535 || candidateY < 0 || candidateY > 65535)
+						continue;
+					Position candidate(SDL_static_cast(Uint16, candidateX), SDL_static_cast(Uint16, candidateY), targetPosition.z);
+					Sint32 targetDeltaX = Position::getDistanceX(candidate, targetPosition);
+					Sint32 targetDeltaY = Position::getDistanceY(candidate, targetPosition);
+					if(targetDeltaX == 0 || targetDeltaY == 0)
+						continue;
+					Tile* tile = g_map.getTile(candidate);
+					if(!tile || !tile->isWalkable() || tile->hasFloorChangeRisk() || tile->getTopCreature())
+						continue;
+					Sint32 distancePenalty = std::abs(targetDeltaX - wantedDistance) + std::abs(targetDeltaY - wantedDistance);
+					Sint32 walkDistance = UTIL_max<Sint32>(Position::getDistanceX(current, candidate), Position::getDistanceY(current, candidate));
+					Sint32 score = distancePenalty * 100 + walkDistance;
+					if(score < bestFallbackScore)
+					{
+						bestFallbackScore = score;
+						bestPosition = candidate;
+						found = true;
+					}
+				}
+			}
+		}
+	}
+
 	if(found)
 	{
-		g_game.startAutoWalk(bestPosition);
-		m_targetMovementWalking = true;
+		m_targetMovementWalking = g_game.startAutoWalk(bestPosition, true, false);
 	}
 	m_nextTargetMovement = now + 300;
 }
@@ -579,7 +802,8 @@ bool CaveBot::lootOneItem(Container* source)
 		return false;
 
 	Container* destination = g_game.findContainer(m_settings.lootDestinationContainer);
-	if(!destination || destination->getItems().size() >= SDL_static_cast(size_t, destination->getCapacity()))
+	bool dropOnGround = (m_settings.dropLootNoCapacity && g_game.getPlayerCapacity() <= 0.0);
+	if(!dropOnGround && (!destination || destination->getItems().size() >= SDL_static_cast(size_t, destination->getCapacity())))
 		return false;
 
 	for(ItemUI* item : source->getItems())
@@ -587,8 +811,17 @@ bool CaveBot::lootOneItem(Container* source)
 		if(!item || !idInList(item->getID(), m_settings.lootItemIds))
 			continue;
 
-		Position destinationPosition(0xFFFF, SDL_static_cast(Uint16, m_settings.lootDestinationContainer) | 0x40,
-			SDL_static_cast(Uint8, destination->getItems().size()));
+		Position destinationPosition;
+		if(dropOnGround)
+		{
+			Creature* local = g_map.getLocalCreature();
+			if(!local)
+				return false;
+			destinationPosition = local->getCurrentPosition();
+		}
+		else
+			destinationPosition = Position(0xFFFF, SDL_static_cast(Uint16, m_settings.lootDestinationContainer) | 0x40,
+				SDL_static_cast(Uint8, destination->getItems().size()));
 		g_game.sendMove(item->getCurrentPosition(), item->getID(), 0, destinationPosition, item->getItemCount());
 		return true;
 	}
@@ -796,7 +1029,11 @@ void CaveBot::updateLooter(Uint32 now)
 	{
 		if(m_settings.caveEnabled && now >= m_lastWalkRequest + 350)
 		{
-			g_game.startAutoWalk(target.position);
+			if(!g_game.startAutoWalk(target.position, true, false))
+			{
+				finishLootTarget(now);
+				return;
+			}
 			m_lastWalkRequest = now;
 		}
 		m_nextLootAction = now + 100;
@@ -862,6 +1099,8 @@ bool CaveBot::executeWaypoint(const CaveBotWaypoint& waypoint)
 	Uint8 targetStack = SDL_static_cast(Uint8, tile->getUseStackPos(targetThing));
 	if(waypoint.itemId == 0)
 	{
+		// Use the current tile item id when a door/lever has transformed since it
+		// was recorded. targetItemId remains the recorded identity shown to users.
 		g_game.sendUseItem(waypoint.position, targetItem->getID(), targetStack, g_game.findEmptyContainerId());
 		return true;
 	}
@@ -897,7 +1136,45 @@ void CaveBot::updateWalker(Uint32 now)
 
 	CaveBotWaypoint& waypoint = m_waypoints[m_currentWaypoint];
 	Position current = local->getCurrentPosition();
+
+	// A recorded use followed by another floor means that the used square is
+	// the opened hole/stair. Wait for the server to transform it and then step
+	// onto that exact square before trying the waypoint on the other floor.
+	if(m_floorTransitionPending)
+	{
+		if(current.z != m_floorTransitionSourceZ)
+		{
+			m_floorTransitionPending = false;
+			m_lastWalkRequest = 0;
+			m_walkPositionValid = false;
+		}
+		else
+		{
+			if(now >= m_floorTransitionSince + 5000)
+			{
+				m_floorTransitionPending = false;
+				g_game.processTextMessage(MessageFailure, "CaveBot: nao conseguiu entrar no buraco aberto.");
+			}
+			else if(now >= m_nextWalkAction && now >= m_lastWalkRequest + 250)
+			{
+				g_game.startAutoWalk(m_floorTransitionPosition, false, false);
+				m_lastWalkRequest = now;
+			}
+			return;
+		}
+	}
+
+	size_t nextWaypoint = m_currentWaypoint + 1;
+	if(nextWaypoint >= m_waypoints.size() && m_settings.loop)
+		nextWaypoint = 0;
+	bool hasNextWaypoint = (nextWaypoint < m_waypoints.size() && nextWaypoint != m_currentWaypoint);
+	bool changesFloorNext = (hasNextWaypoint && m_waypoints[nextWaypoint].position.z != waypoint.position.z &&
+		Position::getDistanceX(waypoint.position, m_waypoints[nextWaypoint].position) <= 1 &&
+		Position::getDistanceY(waypoint.position, m_waypoints[nextWaypoint].position) <= 1);
+
 	Uint8 reachDistance = (waypoint.action == CAVEBOT_EXANI ? 0 : m_settings.reachDistance);
+	if(waypoint.action == CAVEBOT_USE)
+		reachDistance = UTIL_max<Uint8>(1, reachDistance);
 	bool reached = (current.z == waypoint.position.z &&
 		Position::getDistanceX(current, waypoint.position) <= reachDistance &&
 		Position::getDistanceY(current, waypoint.position) <= reachDistance);
@@ -934,7 +1211,10 @@ void CaveBot::updateWalker(Uint32 now)
 		}
 		if(now >= m_lastWalkRequest + m_settings.retryDelay)
 		{
-			g_game.startAutoWalk(waypoint.position);
+			// A risky tile is allowed only when the very next recorded waypoint is
+			// on the neighboring floor. This preserves protection against accidental
+			// holes while allowing intentional stairs/holes in recorded routes.
+			g_game.startAutoWalk(waypoint.position, !changesFloorNext, false);
 			m_lastWalkRequest = now;
 		}
 		return;
@@ -948,6 +1228,13 @@ void CaveBot::updateWalker(Uint32 now)
 			m_lastWalkRequest = now;
 		}
 		return;
+	}
+	if(waypoint.action == CAVEBOT_USE && changesFloorNext && current.z == waypoint.position.z)
+	{
+		m_floorTransitionPending = true;
+		m_floorTransitionPosition = waypoint.position;
+		m_floorTransitionSourceZ = current.z;
+		m_floorTransitionSince = now;
 	}
 	m_nextWalkAction = now + waypoint.delay;
 	m_lastWalkRequest = 0;

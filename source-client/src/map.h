@@ -125,7 +125,7 @@ class Map
 		void removeMagicEffects(Uint8 posZ);
 		void removeMagicEffects(const Position& position, Uint16 effectId);
 
-		PathFind findPath(std::vector<Direction>& directions, const Position& startPos, const Position& endPos);
+		PathFind findPath(std::vector<Direction>& directions, const Position& startPos, const Position& endPos, bool avoidFloorChanges = false);
 		Tile* findTile(Sint32 x, Sint32 y, iRect& gameWindow, Sint32 scaledSize, float scale, Creature*& topCreature, bool multifloor);
 
 		Creature* getLocalCreature() {return m_localCreature;}

@@ -191,7 +191,7 @@ class Game
 		void sendAnswerModalDialog(Uint32 dialogId, Uint8 button, Uint8 choice);
 
 		void stopActions();
-		void startAutoWalk(const Position& toPosition);
+		bool startAutoWalk(const Position& toPosition, bool avoidFloorChanges = false, bool showErrors = true);
 		void stopAutoWalk();
 		void checkServerMovement(Direction dir);
 		void checkLocalCreatureMovement();
@@ -333,6 +333,8 @@ class Game
 	protected:
 		std::bitset<GAME_FEATURE_LAST> m_gameFeatures;
 		std::vector<Direction> m_autoWalkDirections;
+		bool m_autoWalkAvoidFloorChanges = false;
+		bool m_autoWalkShowErrors = true;
 		std::vector<std::pair<Uint32, Uint64>> m_expTable;
 		std::map<ResourceBalanceTypes, Uint64> m_resourceBalances;
 		std::string m_storeUrl;

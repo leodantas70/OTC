@@ -747,6 +747,28 @@ bool Tile::isPathable()
 	return true;
 }
 
+bool Tile::hasFloorChangeRisk()
+{
+	// Buracos, escadas, rampas e pisos de uso forçado não devem fazer parte de
+	// um caminho automatico do bot. O jogador ainda pode usa-los manualmente ou
+	// por um waypoint de acao explicito.
+	if(m_tileElevation >= ITEM_MAX_ELEVATION)
+		return true;
+	if(m_ground && m_ground->getThingType() && m_ground->getThingType()->hasFlag(ThingAttribute_ForceUse))
+		return true;
+	for(Item* item : m_topItems)
+	{
+		if(item && item->getThingType() && item->getThingType()->hasFlag(ThingAttribute_ForceUse))
+			return true;
+	}
+	for(Item* item : m_downItems)
+	{
+		if(item && item->getThingType() && item->getThingType()->hasFlag(ThingAttribute_ForceUse))
+			return true;
+	}
+	return false;
+}
+
 bool Tile::mustHookEast()
 {
 	if(m_ground && m_ground->getThingType() && m_ground->getThingType()->hasFlag(ThingAttribute_HookEast))

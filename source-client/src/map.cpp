@@ -956,7 +956,7 @@ void Map::removeMagicEffects(const Position& position, Uint16 effectId)
 	}
 }
 
-PathFind Map::findPath(std::vector<Direction>& directions, const Position& startPos, const Position& endPos)
+PathFind Map::findPath(std::vector<Direction>& directions, const Position& startPos, const Position& endPos, bool avoidFloorChanges)
 {
 	directions.clear();
 	if(startPos == endPos)
@@ -970,7 +970,7 @@ PathFind Map::findPath(std::vector<Direction>& directions, const Position& start
 	Tile* endTile = getTile(endPos);
 	if(endTile)
 	{
-		if(!endTile->isWalkable())
+		if(!endTile->isWalkable() || (avoidFloorChanges && endTile->hasFloorChangeRisk()))
 			return PathFind_ReturnImpossible;
 	}
 	else
@@ -1087,7 +1087,9 @@ PathFind Map::findPath(std::vector<Direction>& directions, const Position& start
 			endTile = getTile(pos);
 			if(endTile)
 			{
-				if(!endTile->isWalkable() || endTile->getTopCreature() || ((pos.x != endPos.x || pos.y != endPos.y) && !endTile->isPathable()))
+				if(!endTile->isWalkable() || endTile->getTopCreature() ||
+					(!avoidFloorChanges && (pos.x != endPos.x || pos.y != endPos.y) && !endTile->isPathable()) ||
+					(avoidFloorChanges && endTile->hasFloorChangeRisk()))
 					continue;
 
 				speed = SDL_static_cast(Sint32, endTile->getGroundSpeed());

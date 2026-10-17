@@ -623,13 +623,13 @@ void Game::processWalkCancel(Direction direction)
 				m_cancelWalkCounter = 0;
 			}
 			else
-				startAutoWalk(m_autoWalkDestination);
+				startAutoWalk(m_autoWalkDestination, m_autoWalkAvoidFloorChanges, m_autoWalkShowErrors);
 		}
 		else
 		{
 			m_lastCancelWalkPos = pos;
 			m_cancelWalkCounter = 0;
-			startAutoWalk(m_autoWalkDestination);
+			startAutoWalk(m_autoWalkDestination, m_autoWalkAvoidFloorChanges, m_autoWalkShowErrors);
 		}
 	}
 }
@@ -1521,37 +1521,42 @@ void Game::stopActions()
 	}
 }
 
-void Game::startAutoWalk(const Position& toPosition)
+bool Game::startAutoWalk(const Position& toPosition, bool avoidFloorChanges, bool showErrors)
 {
 	Position& pos = g_map.getCentralPosition();
 	m_autoWalkDestination = toPosition;
+	m_autoWalkAvoidFloorChanges = avoidFloorChanges;
+	m_autoWalkShowErrors = showErrors;
 	m_limitWalkDestination.x = 0xFFFF;
 
 	Creature* player = g_map.getLocalCreature();
 	if(!player || player->isPreWalking() || player->isWalking())
-		return;
+		return true;
 
 	if(player->getSpeed() == 0)
 	{
 		g_game.processTextMessage(MessageFailure, "Sorry, not possible.");
 		m_autoWalkDestination.x = 0xFFFF;
-		return;
+		return false;
 	}
 
-	PathFind result = g_map.findPath(m_autoWalkDirections, pos, toPosition);
+	PathFind result = g_map.findPath(m_autoWalkDirections, pos, toPosition, avoidFloorChanges);
 	if(result != PathFind_ReturnSuccessfull)
 	{
-		switch(result)
+		if(showErrors)
 		{
-			case PathFind_ReturnImpossible: g_game.processTextMessage(MessageFailure, "Sorry, not possible."); break;
-			case PathFind_ReturnTooFar: g_game.processTextMessage(MessageFailure, "Destination is out of range."); break;
-			case PathFind_ReturnFirstGoDownStairs: g_game.processTextMessage(MessageFailure, "First go downstairs."); break;
-			case PathFind_ReturnFirstGoUpStairs: g_game.processTextMessage(MessageFailure, "First go upstairs."); break;
-			case PathFind_ReturnNoWay: g_game.processTextMessage(MessageFailure, "There is no way."); break;
-			default: break;
+			switch(result)
+			{
+				case PathFind_ReturnImpossible: g_game.processTextMessage(MessageFailure, "Sorry, not possible."); break;
+				case PathFind_ReturnTooFar: g_game.processTextMessage(MessageFailure, "Destination is out of range."); break;
+				case PathFind_ReturnFirstGoDownStairs: g_game.processTextMessage(MessageFailure, "First go downstairs."); break;
+				case PathFind_ReturnFirstGoUpStairs: g_game.processTextMessage(MessageFailure, "First go upstairs."); break;
+				case PathFind_ReturnNoWay: g_game.processTextMessage(MessageFailure, "There is no way."); break;
+				default: break;
+			}
 		}
 		m_autoWalkDestination.x = 0xFFFF;
-		return;
+		return false;
 	}
 
 	if(getAttackID() != 0 && g_engine.getChaseMode() == CHASEMODE_FOLLOW && g_engine.hasAutoChaseOff())
@@ -1567,12 +1572,13 @@ void Game::startAutoWalk(const Position& toPosition)
 		m_playerMovement = m_playerCurrentDir;
 		m_autoWalkDirections.clear();
 		checkLocalCreatureMovement();
-		return;
+		return true;
 	}
 
 	m_limitWalkDestination = pos.translatedToDirections(m_autoWalkDirections);
 	sendAutoWalk(m_autoWalkDirections);
 	checkLocalCreatureMovement();
+	return true;
 }
 
 void Game::stopAutoWalk()
@@ -1623,7 +1629,7 @@ void Game::checkLocalCreatureMovement()
 			m_autoWalkDirections.clear();
 		}
 		else
-			startAutoWalk(m_autoWalkDestination);
+			startAutoWalk(m_autoWalkDestination, m_autoWalkAvoidFloorChanges, m_autoWalkShowErrors);
 		return;
 	}
 

@@ -21,6 +21,7 @@
 
 #include "engine.h"
 #include "assistant.h"
+#include "cavebot.h"
 #include "surfaceSoftware.h"
 #include "surfaceDirect3D9.h"
 #include "surfaceDirect3D11.h"
@@ -102,6 +103,21 @@ namespace
 		else
 			len = SDL_snprintf(itemIdText, sizeof(itemIdText), "Item ID: %u | quantidade/cargas: %u", SDL_static_cast(Uint32, itemId), SDL_static_cast(Uint32, itemCount));
 		g_game.processTextMessage(MessageLook, std::string(itemIdText, SDL_static_cast(size_t, len)));
+	}
+
+	void engineSendManualUseItem(const Position& position, Uint16 itemId, Uint8 stackpos, Uint8 containerId)
+	{
+		if(position.x != 0xFFFF)
+			g_caveBot.notifyManualUse(position, itemId);
+		g_game.sendUseItem(position, itemId, stackpos, containerId);
+	}
+
+	void engineSendManualUseItemEx(const Position& sourcePosition, Uint16 sourceItemId, Uint8 sourceStack,
+		const Position& targetPosition, Uint16 targetItemId, Uint8 targetStack)
+	{
+		if(targetPosition.x != 0xFFFF)
+			g_caveBot.notifyManualUseWith(sourcePosition, sourceItemId, targetPosition, targetItemId);
+		g_game.sendUseItemEx(sourcePosition, sourceItemId, sourceStack, targetPosition, targetItemId, targetStack);
 	}
 
 	enum SmartWalkDirectionMask : Uint8
@@ -1455,6 +1471,7 @@ GUI_Window* Engine::getWindow(Uint32 internalID)
 
 void Engine::onKeyDown(SDL_Event& event)
 {
+	g_caveBot.notifyUserInput();
 	if(m_contextMenu)
 		return;
 
@@ -1962,7 +1979,7 @@ void Engine::onKeyDown(SDL_Event& event)
 						{
 							case CLIENT_HOTKEY_ACTION_USEITEM:
 							{
-								g_game.sendUseItem(hotkeyPosition,
+								engineSendManualUseItem(hotkeyPosition,
 									hotkey->action.item.itemId,
 									hotkeyStackpos,
 									g_game.findEmptyContainerId());
@@ -2409,13 +2426,13 @@ void Engine::onLMouseUp(Sint32 x, Sint32 y)
 					Position& position = item->getCurrentPosition();
 					Tile* itemTile = g_map.getTile(position);
 					if(itemTile)
-						g_game.sendUseItemEx(Position(actionData.posX, actionData.posY, actionData.posZ), actionData.itemId, actionData.posStack, position, item->getID(), SDL_static_cast(Uint8, itemTile->getThingStackPos(item)));
+						engineSendManualUseItemEx(Position(actionData.posX, actionData.posY, actionData.posZ), actionData.itemId, actionData.posStack, position, item->getID(), SDL_static_cast(Uint8, itemTile->getThingStackPos(item)));
 				}
 			}
 			else if(itemui)
 			{
 				Position& position = itemui->getCurrentPosition();
-				g_game.sendUseItemEx(Position(actionData.posX, actionData.posY, actionData.posZ), actionData.itemId, actionData.posStack, position, itemui->getID(), 0);
+				engineSendManualUseItemEx(Position(actionData.posX, actionData.posY, actionData.posZ), actionData.itemId, actionData.posStack, position, itemui->getID(), 0);
 			}
 
 			setAction(CLIENT_ACTION_NONE);
@@ -2588,7 +2605,7 @@ void Engine::onLMouseUp(Sint32 x, Sint32 y)
 										return;
 									}
 									else
-										g_game.sendUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
+										engineSendManualUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
 								}
 							}
 						}
@@ -2604,9 +2621,9 @@ void Engine::onLMouseUp(Sint32 x, Sint32 y)
 							else
 							{
 								if(position.y & 0x40)
-									g_game.sendUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
+									engineSendManualUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
 								else
-									g_game.sendUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
+									engineSendManualUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
 							}
 						}
 					}
@@ -2630,7 +2647,7 @@ void Engine::onLMouseUp(Sint32 x, Sint32 y)
 										return;
 									}
 									else
-										g_game.sendUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
+										engineSendManualUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
 								}
 							}
 						}
@@ -2646,9 +2663,9 @@ void Engine::onLMouseUp(Sint32 x, Sint32 y)
 							else
 							{
 								if(position.y & 0x40)
-									g_game.sendUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
+									engineSendManualUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
 								else
-									g_game.sendUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
+									engineSendManualUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
 							}
 						}
 					}
@@ -2993,7 +3010,7 @@ void Engine::onRMouseUp(Sint32 x, Sint32 y)
 										return;
 									}
 									else
-										g_game.sendUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
+										engineSendManualUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
 								}
 							}
 						}
@@ -3009,9 +3026,9 @@ void Engine::onRMouseUp(Sint32 x, Sint32 y)
 							else
 							{
 								if(position.y & 0x40)
-									g_game.sendUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
+									engineSendManualUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
 								else
-									g_game.sendUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
+									engineSendManualUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
 							}
 						}
 					}
@@ -3035,7 +3052,7 @@ void Engine::onRMouseUp(Sint32 x, Sint32 y)
 										return;
 									}
 									else
-										g_game.sendUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
+										engineSendManualUseItem(position, item->getID(), SDL_static_cast(Uint8, itemTile->getUseStackPos(item)), g_game.findEmptyContainerId());
 								}
 							}
 						}
@@ -3051,9 +3068,9 @@ void Engine::onRMouseUp(Sint32 x, Sint32 y)
 							else
 							{
 								if(position.y & 0x40)
-									g_game.sendUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
+									engineSendManualUseItem(position, itemui->getID(), 0, (position.y & 0x0F));
 								else
-									g_game.sendUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
+									engineSendManualUseItem(position, itemui->getID(), 0, g_game.findEmptyContainerId());
 							}
 						}
 					}
@@ -4484,9 +4501,9 @@ void Engine::standardThingEvent(Uint32 event, Sint32)
 			if(pos.x == 0xFFFF)
 			{
 				if(pos.y & 0x40)
-					g_game.sendUseItem(pos, actionData.itemId, actionData.posStack, (pos.y & 0x0F));
+					engineSendManualUseItem(pos, actionData.itemId, actionData.posStack, (pos.y & 0x0F));
 				else
-					g_game.sendUseItem(pos, actionData.itemId, actionData.posStack, g_game.findEmptyContainerId());
+					engineSendManualUseItem(pos, actionData.itemId, actionData.posStack, g_game.findEmptyContainerId());
 			}
 			else
 			{
@@ -4495,7 +4512,7 @@ void Engine::standardThingEvent(Uint32 event, Sint32)
 				{
 					Thing* useThing = tile->getTopUseThing();
 					if(useThing)
-						g_game.sendUseItem(pos, (useThing->isItem() ? useThing->getItem()->getID() : 0x62), SDL_static_cast(Uint8, tile->getUseStackPos(useThing)), g_game.findEmptyContainerId());
+						engineSendManualUseItem(pos, (useThing->isItem() ? useThing->getItem()->getID() : 0x62), SDL_static_cast(Uint8, tile->getUseStackPos(useThing)), g_game.findEmptyContainerId());
 				}
 			}
 		}
@@ -4504,7 +4521,7 @@ void Engine::standardThingEvent(Uint32 event, Sint32)
 		{
 			Position pos = Position(actionData.posX, actionData.posY, actionData.posZ);
 			if(pos.x == 0xFFFF)
-				g_game.sendUseItem(pos, actionData.itemId, actionData.posStack, g_game.findEmptyContainerId());
+				engineSendManualUseItem(pos, actionData.itemId, actionData.posStack, g_game.findEmptyContainerId());
 			else
 			{
 				Tile* tile = g_map.getTile(pos);
@@ -4512,7 +4529,7 @@ void Engine::standardThingEvent(Uint32 event, Sint32)
 				{
 					Thing* useThing = tile->getTopUseThing();
 					if(useThing)
-						g_game.sendUseItem(pos, (useThing->isItem() ? useThing->getItem()->getID() : 0x62), SDL_static_cast(Uint8, tile->getUseStackPos(useThing)), g_game.findEmptyContainerId());
+						engineSendManualUseItem(pos, (useThing->isItem() ? useThing->getItem()->getID() : 0x62), SDL_static_cast(Uint8, tile->getUseStackPos(useThing)), g_game.findEmptyContainerId());
 				}
 			}
 		}
