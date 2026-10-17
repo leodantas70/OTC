@@ -22,8 +22,25 @@ namespace
 {
 	const Uint32 ASSISTANT_ACTION_DELAY = 650;
 	const Uint32 ASSISTANT_HASTE_DELAY = 2000;
-	const Uint32 ASSISTANT_EQUIPMENT_RETRY_DELAY = 250;
-	const Uint32 ASSISTANT_EQUIPMENT_CONFIRM_DELAY = 1500;
+	// The emergency ring has its own short retry/confirmation cycle.  It must
+	// react before the normal spell/item action cooldown without flooding the
+	// server with several move packets in the same frame.
+	const Uint32 ASSISTANT_EQUIPMENT_RETRY_DELAY = 80;
+	const Uint32 ASSISTANT_EQUIPMENT_CONFIRM_DELAY = 120;
+	const Uint32 ASSISTANT_EQUIPMENT_EMPTY_CONFIRM_DELAY = 40;
+
+	bool isEnergyRingId(Uint16 itemId, Uint16 configuredId)
+	{
+		if(itemId == 0 || configuredId == 0)
+			return false;
+		if(itemId == configuredId)
+			return true;
+
+		// The 7.x assets used by this client expose the modern client ids. Keep
+		// the classic OT ids as a fallback for compatible custom data packs.
+		return ((configuredId == 3051 && itemId == 3088) ||
+			(configuredId == 2167 && itemId == 2204));
+	}
 
 	bool readBool(Config& config, const char* key, bool fallback)
 	{
@@ -298,56 +315,118 @@ void Assistant::tick()
 	if(healthPercent == 0)
 		return;
 
-	// Energy Ring is an emergency action. It must not wait for the shared
-	// healing/mana/haste delay and it must be able to replace a normal ring.
-	if(m_settings.energyRingEnabled && m_settings.energyRingId != 0 && SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
+	// Energy Ring is an emergency action. It does not use the shared action
+	// cooldown, and a move is only considered complete after the inventory slot
+	// actually changes. This keeps retrying both equip and unequip when a packet
+	// is delayed or rejected by the server.
+	if(m_settings.energyRingEnabled && m_settings.energyRingId != 0)
 	{
 		ItemUI* equippedRing = g_game.getInventoryItem(SLOT_RING);
-		if(m_energyRingActive)
+		Uint16 equippedRingId = (equippedRing ? equippedRing->getID() : 0);
+
+		// The untransformed id is enough to recognize a ring that was already in
+		// the slot. After an equip request, remember the id sent back by the
+		// server because an active Energy Ring commonly has a different id.
+		if(isEnergyRingId(equippedRingId, m_settings.energyRingId))
 		{
-			if(equippedRing)
-				m_energyRingSlotMissingSince = 0;
-			else if(m_energyRingSlotMissingSince == 0)
-				m_energyRingSlotMissingSince = now;
-			else if(SDL_TICKS_PASSED(now, m_energyRingSlotMissingSince + ASSISTANT_EQUIPMENT_CONFIRM_DELAY))
-			{
-				// Equipment moves briefly clear the slot before the transformed ring
-				// arrives. Only forget the latch after the slot stayed empty.
-				m_energyRingActive = false;
-				m_energyRingSlotMissingSince = 0;
-			}
+			m_energyRingActive = true;
+			m_energyRingEquippedId = equippedRingId;
+			m_energyRingEquipPending = false;
 		}
 
-		if(healthPercent <= m_settings.energyRingEquipPercent && !m_energyRingActive && !isEquipped(SLOT_RING, m_settings.energyRingId))
+		if(m_energyRingEquipPending)
 		{
-			bool actionSent = equipItem(SLOT_RING, m_settings.energyRingId, m_settings.energyRingSubtype);
-			if(actionSent)
+			bool slotChanged = (equippedRing &&
+				(m_energyRingPreviousId == 0 || equippedRingId != m_energyRingPreviousId));
+			if(slotChanged)
 			{
-				// The server changes an active Energy Ring to another item id. Keep a
-				// local latch so that the transformed ring is not replaced every tick,
-				// starving higher-priority healing actions.
 				m_energyRingActive = true;
-				m_energyRingSlotMissingSince = 0;
-				m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
+				m_energyRingEquippedId = equippedRingId;
+				m_energyRingEquipPending = false;
 			}
-			else
-				m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
+			else if(SDL_TICKS_PASSED(now, m_energyRingRequestTime + ASSISTANT_EQUIPMENT_CONFIRM_DELAY))
+				m_energyRingEquipPending = false;
 		}
-		else if(healthPercent >= m_settings.energyRingUnequipPercent && m_energyRingActive)
+
+		if(m_energyRingUnequipPending)
 		{
-			if(equippedRing)
+			if(!equippedRing)
 			{
-				// The transformed id is unknown, so remove the slot only while the
-				// Assistant knows that it placed the emergency ring.
-				bool actionSent = unequipItem(SLOT_RING, 0);
-				if(actionSent)
+				// Server-confirmed removal. Do not clear the latch when merely sending
+				// the move, otherwise a refused packet leaves the ring stuck forever.
+				m_energyRingActive = false;
+				m_energyRingEquippedId = 0;
+				m_energyRingUnequipPending = false;
+				m_energyRingSlotMissingSince = 0;
+			}
+			else if(SDL_TICKS_PASSED(now, m_energyRingRequestTime + ASSISTANT_EQUIPMENT_CONFIRM_DELAY))
+				m_energyRingUnequipPending = false;
+		}
+
+		if(healthPercent <= m_settings.energyRingEquipPercent)
+		{
+			m_energyRingUnequipPending = false;
+
+			// If the server removed/expired the emergency ring, confirm the empty
+			// slot very briefly and immediately look for another one.
+			if(m_energyRingActive && !equippedRing)
+			{
+				if(m_energyRingSlotMissingSince == 0)
+					m_energyRingSlotMissingSince = now;
+				else if(SDL_TICKS_PASSED(now, m_energyRingSlotMissingSince + ASSISTANT_EQUIPMENT_EMPTY_CONFIRM_DELAY))
 				{
 					m_energyRingActive = false;
-					m_energyRingSlotMissingSince = 0;
+					m_energyRingEquippedId = 0;
+				}
+			}
+			else if(equippedRing)
+				m_energyRingSlotMissingSince = 0;
+
+			// A manually equipped ring may occupy the slot. Sending the emergency
+			// ring to SLOT_RING lets the server replace it; confirmation above then
+			// records the transformed id without blocking healing.
+			if(!m_energyRingActive && !m_energyRingEquipPending && SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
+			{
+				m_energyRingPreviousId = equippedRingId;
+				if(equipItem(SLOT_RING, m_settings.energyRingId, m_settings.energyRingSubtype))
+				{
+					m_energyRingEquipPending = true;
+					m_energyRingRequestTime = now;
+				}
+				m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
+			}
+		}
+		else if(healthPercent >= m_settings.energyRingUnequipPercent)
+		{
+			m_energyRingSlotMissingSince = 0;
+
+			// If the equip crossed the threshold while its packet was in flight,
+			// wait for the slot change and remove it on the very next tick. If the
+			// packet never lands, the pending state expires above.
+			if(m_energyRingActive)
+			{
+				// Never remove an unrelated ring that the player equipped manually.
+				if(equippedRing && m_energyRingEquippedId != 0 && equippedRingId != m_energyRingEquippedId)
+				{
+					m_energyRingActive = false;
+					m_energyRingEquippedId = 0;
+					m_energyRingUnequipPending = false;
+				}
+				else if(!equippedRing)
+				{
+					m_energyRingActive = false;
+					m_energyRingEquippedId = 0;
+					m_energyRingUnequipPending = false;
+				}
+				else if(!m_energyRingUnequipPending && SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
+				{
+					if(unequipItem(SLOT_RING, 0))
+					{
+						m_energyRingUnequipPending = true;
+						m_energyRingRequestTime = now;
+					}
 					m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
 				}
-				else
-					m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
 			}
 		}
 	}
@@ -404,11 +483,18 @@ void Assistant::resetRuntime()
 	m_nextHaste = 0;
 	m_nextEnergyRingRetry = 0;
 	m_nextAmuletRetry = 0;
+	m_energyRingRequestTime = 0;
 	m_energyRingSlotMissingSince = 0;
+	m_energyRingPreviousId = 0;
+	m_energyRingEquipPending = false;
+	m_energyRingUnequipPending = false;
 	// Preserve the emergency-ring latch while settings are saved. A normal ring
 	// placed manually must never be classified as an Assistant-equipped ring.
 	if(!g_game.getInventoryItem(SLOT_RING))
+	{
 		m_energyRingActive = false;
+		m_energyRingEquippedId = 0;
+	}
 }
 
 void Assistant::prepareShutdown()

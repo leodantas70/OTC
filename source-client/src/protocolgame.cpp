@@ -35,6 +35,7 @@
 #include "protocolfeatures.h"
 
 #include "GUI_Elements/GUI_Log.h"
+#include "GUI/GUI_UTIL.h"
 #include "GUI/itemUI.h"
 
 #if defined(_WIN32)
@@ -360,7 +361,12 @@ void ProtocolGame::parseMessage(InputMessage& msg)
 
 void ProtocolGame::parseOtclient(InputMessage& msg)
 {
-	msg.getU8();
+	const Uint8 opcode = msg.getU8();
+	if(shouldUseOldFaster772Handshake() && opcode == 0xC9)
+	{
+		parseOldFasterStoreMessage(msg);
+		return;
+	}
 	msg.getRawString();
 }
 
@@ -368,6 +374,20 @@ void ProtocolGame::parseOtclientV8LuaPacket(InputMessage& msg, Uint8 opcode)
 {
 	UTIL_protocolDebugLog("game", "ignore otcv8 lua opcode=0x%02X unread=%u", SDL_static_cast(Uint32, opcode), SDL_static_cast(Uint32, msg.getUnreadSize()));
 	msg.setReadPos(msg.getMessageSize());
+}
+
+void ProtocolGame::parseOldFasterStoreMessage(InputMessage& msg)
+{
+	const std::string payload = msg.getString();
+	const size_t chunkSize = 1500;
+	const size_t chunkCount = UTIL_max<size_t>(1, (payload.size() + chunkSize - 1) / chunkSize);
+	for(size_t index = 0; index < chunkCount; ++index)
+	{
+		const size_t offset = index * chunkSize;
+		UTIL_protocolDebugLog("oldfaster-store", "recv json part=%u/%u bytes=%u payload=%s",
+			SDL_static_cast(Uint32, index + 1), SDL_static_cast(Uint32, chunkCount), SDL_static_cast(Uint32, payload.size()), payload.substr(offset, chunkSize).c_str());
+	}
+	UTIL_processOldFasterStoreMessage(payload);
 }
 
 void ProtocolGame::parseServerFeatures(InputMessage& msg)
@@ -7207,6 +7227,16 @@ void ProtocolGame::sendMount(bool active)
 	OutputMessage msg(getHeaderPos());
 	msg.addU8(GameMountOpcode);
 	msg.addBool(active);
+	onSend(msg);
+}
+
+void ProtocolGame::sendOldFasterStoreMessage(const std::string& payload)
+{
+	OutputMessage msg(getHeaderPos());
+	msg.addU8(GameOtclientOpcode);
+	msg.addU8(0xC9);
+	msg.addString(payload);
+	UTIL_protocolDebugLog("oldfaster-store", "send json bytes=%u payload=%s", SDL_static_cast(Uint32, payload.size()), payload.c_str());
 	onSend(msg);
 }
 

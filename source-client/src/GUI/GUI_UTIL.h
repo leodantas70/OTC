@@ -157,6 +157,10 @@ void UTIL_goodsShopWindow(Uint64 playerMoney, void* itemsData);
 void UTIL_closeShopWindow();
 void UTIL_updateShopWindow();
 
+//Old FasterOT premium store
+void UTIL_createOldFasterStore();
+void UTIL_processOldFasterStoreMessage(const std::string& payload);
+
 //Spells widget
 void UTIL_toggleSpellsWindow();
 

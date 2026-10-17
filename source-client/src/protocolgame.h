@@ -822,6 +822,7 @@ class ProtocolGame : public Protocol
 		void sendRequestOutfit();
 		void sendSetOutfit(Uint16 lookType, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount);
 		void sendMount(bool active);
+		void sendOldFasterStoreMessage(const std::string& payload);
 
 		//Vip System
 		void sendAddVip(const std::string& name);
@@ -937,6 +938,7 @@ class ProtocolGame : public Protocol
 		//Main Functions
 		void parseOtclient(InputMessage& msg);
 		void parseOtclientV8LuaPacket(InputMessage& msg, Uint8 opcode);
+		void parseOldFasterStoreMessage(InputMessage& msg);
 		void parseServerFeatures(InputMessage& msg);
 		void parseCreatureData(InputMessage& msg);
 		void parseSessionDumpStart(InputMessage& msg);

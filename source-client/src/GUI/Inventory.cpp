@@ -77,6 +77,10 @@
 #define INVENTORY_ASSISTANT_TITLE "Assist."
 #define INVENTORY_ASSISTANT_DESCRIPTION "Abrir configuracoes do Assistant"
 #define INVENTORY_ASSISTANT_EVENTID 1018
+#define INVENTORY_SHOP_TITLE "Shop"
+#define INVENTORY_SHOP_DESCRIPTION "Abrir o shop do Old FasterOT"
+#define INVENTORY_SHOP_LINK "https://oldfasterot.com/"
+#define INVENTORY_SHOP_EVENTID 1019
 
 extern Engine g_engine;
 extern Map g_map;
@@ -114,6 +118,14 @@ void inventory_Events(Uint32 event, Sint32)
 		case INVENTORY_MINIMIZE_EVENTID: {UTIL_createInventoryPanel(true); g_engine.recalculateGameWindow();} break;
 		case INVENTORY_MAXIMIZE_EVENTID: {UTIL_createInventoryPanel(false); g_engine.recalculateGameWindow();} break;
 		case INVENTORY_ASSISTANT_EVENTID: UTIL_assistantOptions(); break;
+		case INVENTORY_SHOP_EVENTID:
+		{
+			if(g_clientVersion == 772)
+				g_game.sendOldFasterStoreMessage("{\"action\":\"init\",\"data\":{}}");
+			else
+				UTIL_OpenURL(INVENTORY_SHOP_LINK);
+		}
+		break;
 		default: break;
 	}
 }
@@ -137,7 +149,7 @@ void UTIL_createInventoryPanel(bool minimized)
 		}
 		else
 		{
-			iRect rect = pPanel->getRect(); rect.y2 = 170;
+			iRect rect = pPanel->getRect(); rect.y2 = (g_clientVersion < 790 ? 192 : 170);
 			pPanel->setRect(rect, true);
 			pPanel->setInternalID(GUI_PANEL_WINDOW_INVENTORY);
 		}
@@ -148,7 +160,7 @@ void UTIL_createInventoryPanel(bool minimized)
 		if(minimized)
 			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, 64), false, GUI_PANEL_WINDOW_INVENTORY_MINIMIZED);
 		else
-			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, 170), false, GUI_PANEL_WINDOW_INVENTORY);
+			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, (g_clientVersion < 790 ? 192 : 170)), false, GUI_PANEL_WINDOW_INVENTORY);
 	}
 
 	if(minimized)
@@ -234,7 +246,7 @@ void UTIL_createInventoryPanel(bool minimized)
 		newRadioIcon->setButtonEventCallback(&inventory_Events, INVENTORY_FOLLOW_EVENTID);
 		newRadioIcon->startEvents();
 		pPanel->addChild(newRadioIcon);
-		newRadioIcon = new GUI_RadioIcon(iRect(96, 26, GUI_UI_ICON_COMBAT_PVP_UP_W, GUI_UI_ICON_COMBAT_PVP_UP_H), GUI_UI_IMAGE, GUI_UI_ICON_COMBAT_PVP_UP_X, GUI_UI_ICON_COMBAT_PVP_UP_Y, GUI_UI_ICON_COMBAT_PVP_DOWN_X, GUI_UI_ICON_COMBAT_PVP_DOWN_Y, 0, INVENTORY_PVP_DESCRIPTION1);
+		newRadioIcon = new GUI_RadioIcon(iRect(96, 26, GUI_UI_ICON_EXPERTPVP_UP_W, GUI_UI_ICON_EXPERTPVP_UP_H), GUI_UI_IMAGE, GUI_UI_ICON_EXPERTPVP_UP_X, GUI_UI_ICON_EXPERTPVP_UP_Y, GUI_UI_ICON_EXPERTPVP_DOWN_X, GUI_UI_ICON_EXPERTPVP_DOWN_Y, 0, INVENTORY_PVP_DESCRIPTION1);
 		newRadioIcon->setRadioEventCallback(&CheckPvPIcon, INVENTORY_PVP_DESCRIPTION2);
 		newRadioIcon->setButtonEventCallback(&inventory_Events, INVENTORY_PVP_EVENTID);
 		newRadioIcon->startEvents();
@@ -348,7 +360,11 @@ void UTIL_createInventoryPanel(bool minimized)
 			newButton->setButtonEventCallback(&inventory_Events, INVENTORY_HELP_EVENTID);
 			newButton->startEvents();
 			pPanel->addChild(newButton);
-			newButton = new GUI_Button(iRect(124, 149, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), INVENTORY_ASSISTANT_TITLE, 0, INVENTORY_ASSISTANT_DESCRIPTION);
+			newButton = new GUI_Button(iRect(124, 149, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), INVENTORY_SHOP_TITLE, 0, INVENTORY_SHOP_DESCRIPTION);
+			newButton->setButtonEventCallback(&inventory_Events, INVENTORY_SHOP_EVENTID);
+			newButton->startEvents();
+			pPanel->addChild(newButton);
+			newButton = new GUI_Button(iRect(124, 171, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), INVENTORY_ASSISTANT_TITLE, 0, INVENTORY_ASSISTANT_DESCRIPTION);
 			newButton->setButtonEventCallback(&inventory_Events, INVENTORY_ASSISTANT_EVENTID);
 			newButton->startEvents();
 			pPanel->addChild(newButton);
@@ -378,7 +394,7 @@ void UTIL_createInventoryPanel(bool minimized)
 		newRadioIcon->setButtonEventCallback(&inventory_Events, INVENTORY_FOLLOW_EVENTID);
 		newRadioIcon->startEvents();
 		pPanel->addChild(newRadioIcon);
-		newRadioIcon = new GUI_RadioIcon(iRect(147, 59, GUI_UI_ICON_COMBAT_PVP_UP_W, GUI_UI_ICON_COMBAT_PVP_UP_H), GUI_UI_IMAGE, GUI_UI_ICON_COMBAT_PVP_UP_X, GUI_UI_ICON_COMBAT_PVP_UP_Y, GUI_UI_ICON_COMBAT_PVP_DOWN_X, GUI_UI_ICON_COMBAT_PVP_DOWN_Y, 0, INVENTORY_PVP_DESCRIPTION1);
+		newRadioIcon = new GUI_RadioIcon(iRect(147, 59, GUI_UI_ICON_EXPERTPVP_UP_W, GUI_UI_ICON_EXPERTPVP_UP_H), GUI_UI_IMAGE, GUI_UI_ICON_EXPERTPVP_UP_X, GUI_UI_ICON_EXPERTPVP_UP_Y, GUI_UI_ICON_EXPERTPVP_DOWN_X, GUI_UI_ICON_EXPERTPVP_DOWN_Y, 0, INVENTORY_PVP_DESCRIPTION1);
 		newRadioIcon->setRadioEventCallback(&CheckPvPIcon, INVENTORY_PVP_DESCRIPTION2);
 		newRadioIcon->setButtonEventCallback(&inventory_Events, INVENTORY_PVP_EVENTID);
 		newRadioIcon->startEvents();

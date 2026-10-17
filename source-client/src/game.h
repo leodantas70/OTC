@@ -158,6 +158,7 @@ class Game
 		void sendRequestOutfit();
 		void sendSetOutfit(Uint16 lookType, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount);
 		void sendMount(bool active);
+		void sendOldFasterStoreMessage(const std::string& payload);
 		void sendEquipItem(Uint16 itemid, Uint16 count);
 		void sendMove(const Position& fromPos, Uint16 itemid, Uint8 stackpos, const Position& toPos, Uint16 count);
 		void sendLookAt(const Position& position, Uint16 itemId, Uint8 stackpos);

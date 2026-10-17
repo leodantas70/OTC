@@ -31,9 +31,6 @@ ClientFeatures = {
                 GameEnvironmentEffects = true,
                 -- Runes carry their charges as a count byte (see sendLogin).
                 GameRuneCharges = true,
-                GameDoublePlayerGoodsMoney = true,
-                GameDoubleShopBuyAmount = true,
-                GameDoubleShopSellAmount = true,
             }, 
         },
     },

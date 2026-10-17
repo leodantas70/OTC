@@ -59,6 +59,7 @@
     <ClCompile Include="..\..\GUI\Minimap.cpp" />
     <ClCompile Include="..\..\GUI\ModalDialog.cpp" />
     <ClCompile Include="..\..\GUI\Motd.cpp" />
+	<ClCompile Include="..\..\GUI\OldFasterStore.cpp" />
     <ClCompile Include="..\..\GUI\Options.cpp" />
     <ClCompile Include="..\..\GUI\Outfits.cpp" />
     <ClCompile Include="..\..\GUI\ProtocolOptions.cpp" />

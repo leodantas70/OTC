@@ -68,7 +68,12 @@ class Assistant
 		Uint32 m_nextHaste = 0;
 		Uint32 m_nextEnergyRingRetry = 0;
 		Uint32 m_nextAmuletRetry = 0;
+		Uint32 m_energyRingRequestTime = 0;
 		Uint32 m_energyRingSlotMissingSince = 0;
+		Uint16 m_energyRingPreviousId = 0;
+		Uint16 m_energyRingEquippedId = 0;
+		bool m_energyRingEquipPending = false;
+		bool m_energyRingUnequipPending = false;
 		bool m_energyRingActive = false;
 		Uint8 m_previousLightMode = 1;
 		bool m_configLoaded = false;

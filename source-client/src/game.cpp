@@ -1199,6 +1199,16 @@ void Game::sendMount(bool active)
 	}
 }
 
+void Game::sendOldFasterStoreMessage(const std::string& payload)
+{
+	if(g_engine.isIngame() && Protocol::getProtocolVersion() == 772 && Protocol::getClientVersion() == 772)
+	{
+		ProtocolGame* game = GET_SAFE_PROTOCOLGAME;
+		if(game && game->canPerformAction())
+			game->sendOldFasterStoreMessage(payload);
+	}
+}
+
 void Game::sendEquipItem(Uint16 itemid, Uint16 count)
 {
 	if(g_engine.isIngame())
