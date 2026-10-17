@@ -149,6 +149,7 @@ class Engine
 		void bindHotkey(ClientHotkeyKeys hotKey, SDL_Keycode key, Uint16 mods, ClientHotkeys hotkeyType);
 		void bindHotkeyAction(SDL_Keycode key, Uint16 mods, const std::string& text, bool sendAutomatically);
 		void bindHotkeyItem(SDL_Keycode key, Uint16 mods, Uint16 itemId, Uint8 itemSubtype, Uint8 usageType);
+		void removeHotkeyAction(SDL_Keycode key, Uint16 mods);
 		void beginHotkeyItemSelection(SDL_Keycode key, Uint16 mods);
 		void resetToDefaultHotkeys(bool wasd);
 

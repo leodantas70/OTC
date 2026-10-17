@@ -79,7 +79,7 @@ class GUI_ShopItem : public GUI_Element
 class GUI_ShopSelectItem : public GUI_Element
 {
 	public:
-		GUI_ShopSelectItem(iRect boxRect, const std::string& itemName, const std::string& itemDescription, Uint16 itemId, Uint8 itemSubtype, size_t index, Uint32 internalID = 0);
+		GUI_ShopSelectItem(iRect boxRect, const std::string& itemName, const std::string& itemDescription, Uint16 itemId, Uint8 itemSubtype, size_t index, bool available, Uint32 internalID = 0);
 		~GUI_ShopSelectItem();
 
 		// non-copyable
@@ -101,6 +101,7 @@ class GUI_ShopSelectItem : public GUI_Element
 		GUI_DynamicLabel m_description;
 		ItemUI* m_item;
 		size_t m_index;
+		bool m_available;
 };
 
 #endif /* __FILE_GUI_SHOPWINDOW_h_ */

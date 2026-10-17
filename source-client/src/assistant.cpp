@@ -9,11 +9,15 @@
 #include "const.h"
 #include "engine.h"
 #include "game.h"
+#include "map.h"
+#include "creature.h"
 #include "position.h"
+#include "GUI/GUI_UTIL.h"
 #include "GUI/itemUI.h"
 
 extern Engine g_engine;
 extern Game g_game;
+extern Map g_map;
 extern std::string g_prefPath;
 
 Assistant g_assistant;
@@ -109,6 +113,18 @@ void Assistant::loadConfig()
 		settings.lowHealthAmuletSubtype = SDL_static_cast(Uint8, readNumber(config, "LowHealthAmuletSubtype", settings.lowHealthAmuletSubtype, 255));
 		settings.highHealthAmuletId = SDL_static_cast(Uint16, readNumber(config, "HighHealthAmuletId", settings.highHealthAmuletId, 65535));
 		settings.highHealthAmuletSubtype = SDL_static_cast(Uint8, readNumber(config, "HighHealthAmuletSubtype", settings.highHealthAmuletSubtype, 255));
+		settings.ammunitionEnabled = readBool(config, "AmmunitionEnabled", settings.ammunitionEnabled);
+		settings.ammunitionId = SDL_static_cast(Uint16, readNumber(config, "AmmunitionId", settings.ammunitionId, 65535));
+		settings.autoRuneEnabled = readBool(config, "AutoRuneEnabled", settings.autoRuneEnabled);
+		settings.runeManaTraining = readBool(config, "RuneManaTraining", settings.runeManaTraining);
+		settings.runeSpell = readText(config, "RuneSpell", settings.runeSpell);
+		settings.runeMinimumMana = readNumber(config, "RuneMinimumMana", settings.runeMinimumMana, 1000000);
+		settings.runeAntiIdle = readBool(config, "RuneAntiIdle", settings.runeAntiIdle);
+		settings.runeAutoFood = readBool(config, "RuneAutoFood", settings.runeAutoFood);
+		settings.runeFoodIds = readText(config, "RuneFoodIds", settings.runeFoodIds);
+		settings.runeLogoutNoBlank = readBool(config, "RuneLogoutNoBlank", settings.runeLogoutNoBlank);
+		settings.blankRuneId = SDL_static_cast(Uint16, readNumber(config, "BlankRuneId", settings.blankRuneId, 65535));
+		settings.runeLogoutNonVip = readBool(config, "RuneLogoutNonVip", settings.runeLogoutNonVip);
 	}
 
 	m_configLoaded = true;
@@ -146,6 +162,18 @@ void Assistant::saveConfig()
 	config.insertKey("LowHealthAmuletSubtype", numberText(m_settings.lowHealthAmuletSubtype));
 	config.insertKey("HighHealthAmuletId", numberText(m_settings.highHealthAmuletId));
 	config.insertKey("HighHealthAmuletSubtype", numberText(m_settings.highHealthAmuletSubtype));
+	config.insertKey("AmmunitionEnabled", boolText(m_settings.ammunitionEnabled));
+	config.insertKey("AmmunitionId", numberText(m_settings.ammunitionId));
+	config.insertKey("AutoRuneEnabled", boolText(m_settings.autoRuneEnabled));
+	config.insertKey("RuneManaTraining", boolText(m_settings.runeManaTraining));
+	config.insertKey("RuneSpell", m_settings.runeSpell);
+	config.insertKey("RuneMinimumMana", numberText(m_settings.runeMinimumMana));
+	config.insertKey("RuneAntiIdle", boolText(m_settings.runeAntiIdle));
+	config.insertKey("RuneAutoFood", boolText(m_settings.runeAutoFood));
+	config.insertKey("RuneFoodIds", m_settings.runeFoodIds);
+	config.insertKey("RuneLogoutNoBlank", boolText(m_settings.runeLogoutNoBlank));
+	config.insertKey("BlankRuneId", numberText(m_settings.blankRuneId));
+	config.insertKey("RuneLogoutNonVip", boolText(m_settings.runeLogoutNonVip));
 }
 
 void Assistant::applySettings(const AssistantSettings& settings)
@@ -267,6 +295,178 @@ bool Assistant::equipItem(Uint8 slot, Uint16 itemId, Uint8 subtype)
 	return true;
 }
 
+bool Assistant::equipAmmunition(Uint16 itemId)
+{
+	if(itemId == 0 || g_game.getInventoryItem(SLOT_AMMO))
+		return false;
+
+	// Munições são empilháveis e o subtipo muda conforme a quantidade. Procure
+	// apenas pelo ID e mova a pilha inteira para o slot de arrows/ammo.
+	for(Uint8 containerId = 0; containerId < GAME_MAX_CONTAINERS; ++containerId)
+	{
+		Container* container = g_game.findContainer(containerId);
+		if(!container)
+			continue;
+
+		for(ItemUI* item : container->getItems())
+		{
+			if(!item || item->getID() != itemId)
+				continue;
+
+			Position destination(0xFFFF, SDL_static_cast(Uint16, SLOT_AMMO) + 1, 0);
+			g_game.sendMove(item->getCurrentPosition(), itemId, 0, destination, item->getItemCount());
+			return true;
+		}
+	}
+	return false;
+}
+
+bool Assistant::hasItem(Uint16 itemId) const
+{
+	if(itemId == 0)
+		return false;
+
+	for(Uint8 slot = SLOT_HEAD; slot < SLOT_LAST; ++slot)
+	{
+		ItemUI* item = g_game.getInventoryItem(slot);
+		if(item && item->getID() == itemId)
+			return true;
+	}
+
+	for(Uint8 containerId = 0; containerId < GAME_MAX_CONTAINERS; ++containerId)
+	{
+		Container* container = g_game.findContainer(containerId);
+		if(!container)
+			continue;
+		for(ItemUI* item : container->getItems())
+		{
+			if(item && item->getID() == itemId)
+				return true;
+		}
+	}
+	return false;
+}
+
+bool Assistant::useFood()
+{
+	const char* cursor = m_settings.runeFoodIds.c_str();
+	while(*cursor)
+	{
+		char* end = NULL;
+		Uint32 parsedId = SDL_strtoul(cursor, &end, 10);
+		if(end == cursor)
+		{
+			++cursor;
+			continue;
+		}
+		cursor = end;
+		if(parsedId == 0 || parsedId > 65535)
+			continue;
+
+		Uint16 foodId = SDL_static_cast(Uint16, parsedId);
+		for(Uint8 containerId = 0; containerId < GAME_MAX_CONTAINERS; ++containerId)
+		{
+			Container* container = g_game.findContainer(containerId);
+			if(!container)
+				continue;
+			for(ItemUI* item : container->getItems())
+			{
+				if(!item || item->getID() != foodId)
+					continue;
+				g_game.sendUseItem(item->getCurrentPosition(), foodId, 0, g_game.findEmptyContainerId());
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+bool Assistant::hasNonVipPlayerOnScreen() const
+{
+	Creature* local = g_map.getLocalCreature();
+	if(!local)
+		return false;
+	Position localPosition = local->getCurrentPosition();
+	for(auto& known : g_map.getKnownCreatures())
+	{
+		Creature* creature = known.second;
+		if(!creature || creature == local || !creature->isPlayer() || !creature->isVisible())
+			continue;
+		if(creature->getCurrentPosition().z != localPosition.z)
+			continue;
+		if(!UTIL_haveVipPlayer(creature->getName()))
+			return true;
+	}
+	return false;
+}
+
+bool Assistant::checkAutoRuneSafety(Uint32 now)
+{
+	if(!m_settings.autoRuneEnabled || m_autoRuneLogoutIssued)
+		return m_autoRuneLogoutIssued;
+	if(m_autoRuneSessionStart == 0)
+	{
+		m_autoRuneSessionStart = now;
+		return false;
+	}
+
+	// Aguarda a lista VIP chegar do servidor antes de classificar jogadores.
+	if(!SDL_TICKS_PASSED(now, m_autoRuneSessionStart + 8000))
+		return false;
+
+	const char* reason = NULL;
+	if(m_settings.runeLogoutNonVip && hasNonVipPlayerOnScreen())
+		reason = "Auto Rune: jogador fora da VIP na tela. Saindo do jogo.";
+	else if(m_settings.runeLogoutNoBlank && m_settings.blankRuneId != 0 && !hasItem(m_settings.blankRuneId))
+		reason = "Auto Rune: acabaram as blank runes abertas. Saindo do jogo.";
+
+	if(!reason)
+		return false;
+	m_autoRuneLogoutIssued = true;
+	g_game.processTextMessage(MessageWarning, reason);
+	g_game.sendLogout();
+	return true;
+}
+
+bool Assistant::tickAutoRuneActions(Uint32 now)
+{
+	if(!m_settings.autoRuneEnabled || m_autoRuneLogoutIssued || m_autoRuneSessionStart == 0 ||
+		!SDL_TICKS_PASSED(now, m_autoRuneSessionStart + 8000))
+		return false;
+
+	if(m_settings.runeAntiIdle && SDL_TICKS_PASSED(now, m_nextRuneIdle))
+	{
+		Creature* local = g_map.getLocalCreature();
+		if(local)
+		{
+			Direction direction = local->getDirection();
+			Direction nextDirection = (direction == DIRECTION_NORTH ? DIRECTION_EAST : DIRECTION_NORTH);
+			g_game.sendTurn(nextDirection);
+			m_nextRuneIdle = now + 180000;
+			return true;
+		}
+	}
+
+	if(m_settings.runeAutoFood && SDL_TICKS_PASSED(now, m_nextRuneFood))
+	{
+		if(useFood())
+		{
+			m_nextRuneFood = now + 60000;
+			return true;
+		}
+		m_nextRuneFood = now + 5000;
+	}
+
+	if(m_settings.runeManaTraining && !m_settings.runeSpell.empty() &&
+		g_game.getPlayerMana() >= m_settings.runeMinimumMana && SDL_TICKS_PASSED(now, m_nextRuneCast))
+	{
+		castSpell(m_settings.runeSpell);
+		m_nextRuneCast = now + 1000;
+		return true;
+	}
+	return false;
+}
+
 bool Assistant::findFreeContainerPosition(Position& position)
 {
 	for(Uint8 containerId = 0; containerId < GAME_MAX_CONTAINERS; ++containerId)
@@ -299,6 +499,29 @@ bool Assistant::unequipItem(Uint8 slot, Uint16 itemId)
 	return true;
 }
 
+bool Assistant::shouldBlockTargetRune() const
+{
+	if(!m_configLoaded || !m_settings.enabled || !g_engine.isIngame() || g_game.getPlayerID() == 0)
+		return false;
+
+	const Uint8 healthPercent = g_game.getPlayerHealthPercent();
+	if(healthPercent == 0)
+		return false;
+
+	if(m_settings.energyRingEnabled && m_settings.energyRingId != 0 && healthPercent <= m_settings.energyRingEquipPercent)
+	{
+		ItemUI* equippedRing = g_game.getInventoryItem(SLOT_RING);
+		Uint16 equippedRingId = (equippedRing ? equippedRing->getID() : 0);
+		bool emergencyRingEquipped = isEnergyRingId(equippedRingId, m_settings.energyRingId) ||
+			(m_energyRingActive && equippedRing && m_energyRingEquippedId != 0 && equippedRingId == m_energyRingEquippedId);
+		if(!emergencyRingEquipped)
+			return true;
+	}
+
+	bool healingConfigured = (m_settings.healingUseRune ? m_settings.healingRuneId != 0 : !m_settings.healingSpell.empty());
+	return (m_settings.healingEnabled && healingConfigured && healthPercent <= m_settings.healingPercent);
+}
+
 void Assistant::tick()
 {
 	if(!m_configLoaded)
@@ -307,10 +530,22 @@ void Assistant::tick()
 	if(m_settings.fullLight && g_engine.getLightMode() != CLIENT_LIGHT_MODE_NONE)
 		applyFullLight(true);
 
-	if(!m_settings.enabled || !g_engine.isIngame() || g_game.getPlayerID() == 0)
+	if(!g_engine.isIngame() || g_game.getPlayerID() == 0)
+	{
+		m_autoRuneSessionStart = 0;
+		m_autoRuneLogoutIssued = false;
 		return;
+	}
 
 	Uint32 now = SDL_GetTicks();
+	if(checkAutoRuneSafety(now))
+		return;
+	if(!m_settings.enabled)
+	{
+		if(tickAutoRuneActions(now))
+			m_nextAction = now + ASSISTANT_ACTION_DELAY;
+		return;
+	}
 	const Uint8 healthPercent = g_game.getPlayerHealthPercent();
 	if(healthPercent == 0)
 		return;
@@ -434,6 +669,42 @@ void Assistant::tick()
 	if(!SDL_TICKS_PASSED(now, m_nextAction))
 		return;
 
+	bool healingConfigured = (m_settings.healingUseRune ? m_settings.healingRuneId != 0 : !m_settings.healingSpell.empty());
+	if(m_settings.healingEnabled && healingConfigured && g_game.getPlayerHealthPercent() > 0 && g_game.getPlayerHealthPercent() <= m_settings.healingPercent)
+	{
+		bool actionSent = true;
+		if(m_settings.healingUseRune)
+			actionSent = useOnSelf(m_settings.healingRuneId, m_settings.healingRuneSubtype);
+		else
+			castSpell(m_settings.healingSpell);
+		m_nextAction = now + (actionSent ? ASSISTANT_ACTION_DELAY : 3000);
+		return;
+	}
+
+	// A situacao critica de ring continua acima do treinamento de runas.
+	if(m_settings.energyRingEnabled && m_settings.energyRingId != 0 && healthPercent <= m_settings.energyRingEquipPercent)
+		return;
+
+	if(tickAutoRuneActions(now))
+	{
+		m_nextAction = now + ASSISTANT_ACTION_DELAY;
+		return;
+	}
+
+	// Cura continua acima da munição na prioridade. Quando o slot estiver
+	// vazio, equipe a pilha configurada sem depender do subtipo/quantidade.
+	if(m_settings.ammunitionEnabled && m_settings.ammunitionId != 0 &&
+		!g_game.getInventoryItem(SLOT_AMMO) && SDL_TICKS_PASSED(now, m_nextAmmunitionRetry))
+	{
+		if(equipAmmunition(m_settings.ammunitionId))
+		{
+			m_nextAmmunitionRetry = now + 150;
+			m_nextAction = now + 150;
+			return;
+		}
+		m_nextAmmunitionRetry = now + 1000;
+	}
+
 	if(m_settings.amuletEnabled && SDL_TICKS_PASSED(now, m_nextAmuletRetry))
 	{
 		Uint16 desiredId = (healthPercent <= m_settings.amuletSwitchPercent) ? m_settings.lowHealthAmuletId : m_settings.highHealthAmuletId;
@@ -448,18 +719,6 @@ void Assistant::tick()
 			}
 			m_nextAmuletRetry = now + 3000;
 		}
-	}
-
-	bool healingConfigured = (m_settings.healingUseRune ? m_settings.healingRuneId != 0 : !m_settings.healingSpell.empty());
-	if(m_settings.healingEnabled && healingConfigured && g_game.getPlayerHealthPercent() > 0 && g_game.getPlayerHealthPercent() <= m_settings.healingPercent)
-	{
-		bool actionSent = true;
-		if(m_settings.healingUseRune)
-			actionSent = useOnSelf(m_settings.healingRuneId, m_settings.healingRuneSubtype);
-		else
-			castSpell(m_settings.healingSpell);
-		m_nextAction = now + (actionSent ? ASSISTANT_ACTION_DELAY : 3000);
-		return;
 	}
 
 	if(m_settings.manaEnabled && m_settings.manaFluidId != 0 && g_game.getPlayerManaPercent() <= m_settings.manaPercent)
@@ -483,6 +742,12 @@ void Assistant::resetRuntime()
 	m_nextHaste = 0;
 	m_nextEnergyRingRetry = 0;
 	m_nextAmuletRetry = 0;
+	m_nextAmmunitionRetry = 0;
+	m_nextRuneCast = 0;
+	m_nextRuneFood = 0;
+	m_nextRuneIdle = 0;
+	m_autoRuneSessionStart = 0;
+	m_autoRuneLogoutIssued = false;
 	m_energyRingRequestTime = 0;
 	m_energyRingSlotMissingSince = 0;
 	m_energyRingPreviousId = 0;

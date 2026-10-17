@@ -81,6 +81,18 @@ GUI_Window* g_mainWindow = NULL;
 
 namespace
 {
+	Uint16 engineNormalizeHotkeyModifiers(Uint16 modifiers)
+	{
+		Uint16 normalized = KMOD_NONE;
+		if((modifiers & KMOD_CTRL) != 0)
+			normalized |= KMOD_CTRL;
+		if((modifiers & KMOD_SHIFT) != 0)
+			normalized |= KMOD_SHIFT;
+		if((modifiers & KMOD_ALT) != 0)
+			normalized |= KMOD_ALT;
+		return normalized;
+	}
+
 	void engineShowItemId(Uint16 itemId, Uint16 itemCount, Sint32 itemSubtype = -1)
 	{
 		char itemIdText[128];
@@ -548,6 +560,25 @@ void Engine::loadCFG()
 		m_rightPanel = SDL_static_cast(Sint32, SDL_strtol(data.c_str(), NULL, 10));
 		m_rightPanel = (m_rightPanel == 0 ? GUI_PANEL_MAIN : m_rightPanel + GUI_PANEL_EXTRA_RIGHT_START - 1);
 
+		// Load the key slots before their optional action payloads. This keeps
+		// newly created hotkeys visible even while they are still unconfigured.
+		vectorData = cfg.fetchKeys("HotkeySlot");
+		for(StringVector::iterator it = vectorData.begin(), end = vectorData.end(); it != end; ++it)
+		{
+			data = (*it);
+			if(data.empty())
+				continue;
+
+			size_t p1 = data.find('|');
+			if(p1 == std::string::npos)
+				continue;
+
+			SDL_Keycode keycode = SDL_static_cast(SDL_Keycode, SDL_strtol(data.substr(0, p1).c_str(), NULL, 10));
+			Uint16 modifers = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p1 + 1).c_str(), NULL, 10));
+			if(keycode != SDLK_UNKNOWN)
+				bindHotkeyAction(keycode, modifers, "", false);
+		}
+
 		vectorData = cfg.fetchKeys("HotkeyAction");
 		for(StringVector::iterator it = vectorData.begin(), end = vectorData.end(); it != end; ++it)
 		{
@@ -846,8 +877,14 @@ void Engine::saveCFG()
 		for(std::vector<HotkeyUsage>::iterator it = m_hotkeys.begin(), end = m_hotkeys.end(); it != end; ++it)
 		{
 			HotkeyUsage& hk = (*it);
-			if(hk.hotkey != CLIENT_HOTKEY_ACTION)
+			if(hk.hotkey != CLIENT_HOTKEY_ACTION || getHotkey(hk.keycode, hk.modifers) != &hk)
 				continue;
+
+			std::string slotEntry;
+			slotEntry += std::to_string(SDL_static_cast(Sint32, hk.keycode));
+			slotEntry += '|';
+			slotEntry += std::to_string(SDL_static_cast(Uint32, hk.modifers));
+			cfg.insertKey("HotkeySlot", slotEntry);
 
 			if(hk.action.type == CLIENT_HOTKEY_ACTION_TEXT && hk.action.text.text && !hk.action.text.text->empty())
 			{
@@ -1427,6 +1464,15 @@ void Engine::onKeyDown(SDL_Event& event)
 		m_description = NULL;
 	}
 
+	// The add-hotkey dialog must receive every key before existing shortcuts.
+	// Otherwise combinations such as Ctrl+F or Ctrl+T execute their old action
+	// instead of being captured for the new binding.
+	if(UTIL_isHotkeyCaptureActive())
+	{
+		UTIL_hotkeyCaptureKeyDown(event);
+		return;
+	}
+
 	HotkeyUsage* hotkey = getHotkey(event.key.keysym.sym, event.key.keysym.mod);
 	auto isNumPadMovementKey = [](SDL_Keycode key) -> bool
 	{
@@ -1611,6 +1657,21 @@ void Engine::onKeyDown(SDL_Event& event)
 		{
 			if(event.key.keysym.sym == SDLK_a || event.key.keysym.sym == SDLK_x || event.key.keysym.sym == SDLK_c || event.key.keysym.sym == SDLK_v)
 				g_chat.onKeyDown(event);
+		}
+
+		// WASD turning must take precedence over configurable shortcuts while the
+		// chat is closed. In particular, the legacy Ctrl+S Skills shortcut used to
+		// overwrite the south-turn binding.
+		if(m_wasdWalking && !m_chatInputEnabled && (modsNoLocks & KMOD_CTRL) != 0 && (modsNoLocks & ~KMOD_CTRL) == 0)
+		{
+			switch(event.key.keysym.sym)
+			{
+				case SDLK_w: turnDirection(DIRECTION_NORTH); return;
+				case SDLK_a: turnDirection(DIRECTION_WEST); return;
+				case SDLK_s: turnDirection(DIRECTION_SOUTH); return;
+				case SDLK_d: turnDirection(DIRECTION_EAST); return;
+				default: break;
+			}
 		}
 
 		if(hotkey)
@@ -1915,9 +1976,12 @@ void Engine::onKeyDown(SDL_Event& event)
 									g_game.getPlayerID());
 							}
 							break;
-							case CLIENT_HOTKEY_ACTION_USEONTARGET:
-							{
-								Uint32 attackId = g_game.getAttackID();
+					case CLIENT_HOTKEY_ACTION_USEONTARGET:
+					{
+						if(g_assistant.shouldBlockTargetRune())
+							break;
+
+						Uint32 attackId = g_game.getAttackID();
 								if(attackId != 0)
 								{
 									g_game.sendUseOnCreature(hotkeyPosition,
@@ -3202,7 +3266,7 @@ void Engine::takeScreenshot(void* data1, void* data2)
 
 HotkeyUsage* Engine::getHotkey(SDL_Keycode key, Uint16 mods)
 {
-	mods &= ~(KMOD_NUM | KMOD_CAPS | KMOD_MODE);
+	mods = engineNormalizeHotkeyModifiers(mods);
 	std::map<Uint16, std::map<SDL_Keycode, size_t>>::iterator mit = m_hotkeyFastAccess.find(mods);
 	if(mit != m_hotkeyFastAccess.end())
 	{
@@ -3217,6 +3281,7 @@ HotkeyUsage* Engine::getHotkey(SDL_Keycode key, Uint16 mods)
 
 void Engine::bindHotkey(ClientHotkeyKeys hotKey, SDL_Keycode key, Uint16 mods, ClientHotkeys hotkeyType)
 {
+	mods = engineNormalizeHotkeyModifiers(mods);
 	std::map<Uint16, std::map<SDL_Keycode, size_t>>::iterator mit = m_hotkeyFastAccess.find(mods);
 	if(mit != m_hotkeyFastAccess.end())
 	{
@@ -3237,6 +3302,7 @@ void Engine::bindHotkey(ClientHotkeyKeys hotKey, SDL_Keycode key, Uint16 mods, C
 
 void Engine::bindHotkeyAction(SDL_Keycode key, Uint16 mods, const std::string& text, bool sendAutomatically)
 {
+	mods = engineNormalizeHotkeyModifiers(mods);
 	// Find existing entry or create new one
 	std::map<Uint16, std::map<SDL_Keycode, size_t>>::iterator mit = m_hotkeyFastAccess.find(mods);
 	if(mit != m_hotkeyFastAccess.end())
@@ -3291,6 +3357,7 @@ void Engine::bindHotkeyAction(SDL_Keycode key, Uint16 mods, const std::string& t
 
 void Engine::bindHotkeyItem(SDL_Keycode key, Uint16 mods, Uint16 itemId, Uint8 itemSubtype, Uint8 usageType)
 {
+	mods = engineNormalizeHotkeyModifiers(mods);
 	if(usageType < CLIENT_HOTKEY_ACTION_USEITEM || usageType > CLIENT_HOTKEY_ACTION_WITHCROSSHAIRS)
 		usageType = CLIENT_HOTKEY_ACTION_WITHCROSSHAIRS;
 
@@ -3343,6 +3410,32 @@ void Engine::bindHotkeyItem(SDL_Keycode key, Uint16 mods, Uint16 itemId, Uint8 i
 	newHotkey.keyid = SDL_static_cast(Uint8, CLIENT_HOTKEY_FIRST_KEY);
 	m_hotkeyFastAccess[mods][key] = m_hotkeys.size();
 	m_hotkeys.push_back(newHotkey);
+}
+
+void Engine::removeHotkeyAction(SDL_Keycode key, Uint16 mods)
+{
+	mods = engineNormalizeHotkeyModifiers(mods);
+	for(std::vector<HotkeyUsage>::iterator it = m_hotkeys.begin(), end = m_hotkeys.end(); it != end; ++it)
+	{
+		HotkeyUsage& usage = (*it);
+		if(usage.hotkey != CLIENT_HOTKEY_ACTION || usage.keycode != key || engineNormalizeHotkeyModifiers(usage.modifers) != mods)
+			continue;
+
+		if(usage.action.type == CLIENT_HOTKEY_ACTION_TEXT && usage.action.text.text)
+		{
+			delete usage.action.text.text;
+			usage.action.text.text = NULL;
+		}
+		usage.action.type = CLIENT_HOTKEY_ACTION_NONE;
+	}
+
+	std::map<Uint16, std::map<SDL_Keycode, size_t>>::iterator mit = m_hotkeyFastAccess.find(mods);
+	if(mit == m_hotkeyFastAccess.end())
+		return;
+
+	std::map<SDL_Keycode, size_t>::iterator it = mit->second.find(key);
+	if(it != mit->second.end() && m_hotkeys[it->second].hotkey == CLIENT_HOTKEY_ACTION)
+		mit->second.erase(it);
 }
 
 void Engine::beginHotkeyItemSelection(SDL_Keycode key, Uint16 mods)

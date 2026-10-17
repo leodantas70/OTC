@@ -37,6 +37,19 @@ struct AssistantSettings
 	Uint8 lowHealthAmuletSubtype = 0;
 	Uint16 highHealthAmuletId = 0;
 	Uint8 highHealthAmuletSubtype = 0;
+	bool ammunitionEnabled = false;
+	Uint16 ammunitionId = 0;
+
+	bool autoRuneEnabled = false;
+	bool runeManaTraining = false;
+	std::string runeSpell = "adori vita vis";
+	Uint32 runeMinimumMana = 400;
+	bool runeAntiIdle = false;
+	bool runeAutoFood = false;
+	std::string runeFoodIds = "3577,3578,3582,3583,3585,3602,3607,3724";
+	bool runeLogoutNoBlank = false;
+	Uint16 blankRuneId = 3147;
+	bool runeLogoutNonVip = false;
 };
 
 class Assistant
@@ -50,6 +63,7 @@ class Assistant
 		void resetRuntime();
 		void prepareShutdown();
 		bool findItem(Uint16 itemId, Uint8 subtype, Position& position, Uint8& stackpos);
+		bool shouldBlockTargetRune() const;
 
 		const AssistantSettings& getSettings() const {return m_settings;}
 		void applySettings(const AssistantSettings& settings);
@@ -60,14 +74,26 @@ class Assistant
 		bool useOnSelf(Uint16 itemId, Uint8 subtype);
 		bool isEquipped(Uint8 slot, Uint16 itemId);
 		bool equipItem(Uint8 slot, Uint16 itemId, Uint8 subtype);
+		bool equipAmmunition(Uint16 itemId);
 		bool unequipItem(Uint8 slot, Uint16 itemId);
 		bool findFreeContainerPosition(Position& position);
+		bool hasItem(Uint16 itemId) const;
+		bool useFood();
+		bool hasNonVipPlayerOnScreen() const;
+		bool checkAutoRuneSafety(Uint32 now);
+		bool tickAutoRuneActions(Uint32 now);
 
 		AssistantSettings m_settings;
 		Uint32 m_nextAction = 0;
 		Uint32 m_nextHaste = 0;
 		Uint32 m_nextEnergyRingRetry = 0;
 		Uint32 m_nextAmuletRetry = 0;
+		Uint32 m_nextAmmunitionRetry = 0;
+		Uint32 m_nextRuneCast = 0;
+		Uint32 m_nextRuneFood = 0;
+		Uint32 m_nextRuneIdle = 0;
+		Uint32 m_autoRuneSessionStart = 0;
+		bool m_autoRuneLogoutIssued = false;
 		Uint32 m_energyRingRequestTime = 0;
 		Uint32 m_energyRingSlotMissingSince = 0;
 		Uint16 m_energyRingPreviousId = 0;

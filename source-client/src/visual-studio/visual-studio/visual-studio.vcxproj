@@ -21,6 +21,7 @@
   <ItemGroup>
     <ClCompile Include="..\..\animatedText.cpp" />
     <ClCompile Include="..\..\assistant.cpp" />
+	<ClCompile Include="..\..\cavebot.cpp" />
     <ClCompile Include="..\..\animator.cpp" />
     <ClCompile Include="..\..\automap.cpp" />
     <ClCompile Include="..\..\config.cpp" />
@@ -33,6 +34,7 @@
     <ClCompile Include="..\..\game.cpp" />
     <ClCompile Include="..\..\GUI\AdvancedGraphicsOptions.cpp" />
     <ClCompile Include="..\..\GUI\AssistantOptions.cpp" />
+	<ClCompile Include="..\..\GUI\CaveBotOptions.cpp" />
     <ClCompile Include="..\..\GUI\BattleWindow.cpp" />
     <ClCompile Include="..\..\GUI\Buttons.cpp" />
     <ClCompile Include="..\..\GUI\Channels.cpp" />

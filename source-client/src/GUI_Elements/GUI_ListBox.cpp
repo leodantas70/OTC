@@ -50,7 +50,11 @@ void GUI_ListBox::setRect(iRect& NewRect)
 	iRect nRect = iRect(NewRect.x1 + NewRect.x2 - 13, NewRect.y1 + 1, 12, NewRect.y2 - 2);
 	m_scrollBar.setRect(nRect);
 	m_tRect = NewRect;
-	m_maxDisplay = (m_tRect.y2 - 4) / 12;
+	// Rows start two pixels below the top and rendering stops sixteen pixels
+	// before the bottom. Use the exact drawable row count; the former formula
+	// overestimated some heights by one and made the final list entry impossible
+	// to scroll into view.
+	m_maxDisplay = UTIL_max<Sint32>(1, (m_tRect.y2 - 6) / 12);
 	m_scrollBar.setScrollSize(SDL_static_cast(Sint32, m_listBox.size()) - m_maxDisplay);
 }
 

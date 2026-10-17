@@ -74,9 +74,6 @@
 #define INVENTORY_MINIMIZE_EVENTID 1016
 #define INVENTORY_MAXIMIZE_DESCRIPTION "Maximise inventory"
 #define INVENTORY_MAXIMIZE_EVENTID 1017
-#define INVENTORY_ASSISTANT_TITLE "Assist."
-#define INVENTORY_ASSISTANT_DESCRIPTION "Abrir configuracoes do Assistant"
-#define INVENTORY_ASSISTANT_EVENTID 1018
 #define INVENTORY_SHOP_TITLE "Shop"
 #define INVENTORY_SHOP_DESCRIPTION "Abrir o shop do Old FasterOT"
 #define INVENTORY_SHOP_LINK "https://oldfasterot.com/"
@@ -117,7 +114,6 @@ void inventory_Events(Uint32 event, Sint32)
 		case INVENTORY_REDFIST_EVENTID: {g_engine.setPvpMode(PVPMODE_RED_FIST); g_game.sendAttackModes();} break;
 		case INVENTORY_MINIMIZE_EVENTID: {UTIL_createInventoryPanel(true); g_engine.recalculateGameWindow();} break;
 		case INVENTORY_MAXIMIZE_EVENTID: {UTIL_createInventoryPanel(false); g_engine.recalculateGameWindow();} break;
-		case INVENTORY_ASSISTANT_EVENTID: UTIL_assistantOptions(); break;
 		case INVENTORY_SHOP_EVENTID:
 		{
 			if(g_clientVersion == 772)
@@ -149,7 +145,7 @@ void UTIL_createInventoryPanel(bool minimized)
 		}
 		else
 		{
-			iRect rect = pPanel->getRect(); rect.y2 = (g_clientVersion < 790 ? 192 : 170);
+			iRect rect = pPanel->getRect(); rect.y2 = (g_clientVersion < 790 ? 174 : 170);
 			pPanel->setRect(rect, true);
 			pPanel->setInternalID(GUI_PANEL_WINDOW_INVENTORY);
 		}
@@ -160,7 +156,7 @@ void UTIL_createInventoryPanel(bool minimized)
 		if(minimized)
 			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, 64), false, GUI_PANEL_WINDOW_INVENTORY_MINIMIZED);
 		else
-			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, (g_clientVersion < 790 ? 192 : 170)), false, GUI_PANEL_WINDOW_INVENTORY);
+			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, (g_clientVersion < 790 ? 174 : 170)), false, GUI_PANEL_WINDOW_INVENTORY);
 	}
 
 	if(minimized)
@@ -362,10 +358,6 @@ void UTIL_createInventoryPanel(bool minimized)
 			pPanel->addChild(newButton);
 			newButton = new GUI_Button(iRect(124, 149, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), INVENTORY_SHOP_TITLE, 0, INVENTORY_SHOP_DESCRIPTION);
 			newButton->setButtonEventCallback(&inventory_Events, INVENTORY_SHOP_EVENTID);
-			newButton->startEvents();
-			pPanel->addChild(newButton);
-			newButton = new GUI_Button(iRect(124, 171, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), INVENTORY_ASSISTANT_TITLE, 0, INVENTORY_ASSISTANT_DESCRIPTION);
-			newButton->setButtonEventCallback(&inventory_Events, INVENTORY_ASSISTANT_EVENTID);
 			newButton->startEvents();
 			pPanel->addChild(newButton);
 		}

@@ -20,6 +20,7 @@
 */
 
 #include "GUI_UTIL.h"
+#include "../config.h"
 #include "../engine.h"
 #include "../GUI_Elements/GUI_Panel.h"
 #include "../GUI_Elements/GUI_PanelWindow.h"
@@ -53,6 +54,9 @@
 #define SORT_DESCENDING_HEALTH_EVENTID 1505
 #define SORT_ASCENDING_NAME_EVENTID 1506
 #define SORT_DESCENDING_NAME_EVENTID 1507
+#define BATTLE_FILTER_PLAYERS_EVENTID 1510
+#define BATTLE_FILTER_MONSTERS_EVENTID 1511
+#define BATTLE_FILTER_NPCS_EVENTID 1512
 
 #define PARTY_TITLE "Party List"
 #define PARTY_MAXIMINI_EVENTID 2000
@@ -66,6 +70,7 @@
 extern Engine g_engine;
 extern Game g_game;
 extern Map g_map;
+extern std::string g_prefPath;
 
 bool g_haveBattleOpen = false;
 bool g_havePartyOpen = false;
@@ -74,6 +79,46 @@ bool g_recreateBattleWindow = false;
 bool g_recreatePartyWindow = false;
 Uint8 g_mouseAction = 0;
 std::vector<Creature*> g_battleCreatures;
+
+namespace
+{
+	bool g_battleShowPlayers = true;
+	bool g_battleShowMonsters = true;
+	bool g_battleShowNpcs = true;
+	bool g_battleFiltersLoaded = false;
+
+	bool readFilter(Config& config, const char* key, bool fallback)
+	{
+		std::string value = config.fetchKey(key);
+		if(value.empty())
+			return fallback;
+		return (SDL_strcasecmp(value.c_str(), "yes") == 0 || SDL_strcasecmp(value.c_str(), "true") == 0 || SDL_atoi(value.c_str()) != 0);
+	}
+
+	void loadBattleFilters()
+	{
+		if(g_battleFiltersLoaded)
+			return;
+		Config config;
+		if(config.openToRead((g_prefPath + "battlelist.cfg").c_str()))
+		{
+			g_battleShowPlayers = readFilter(config, "ShowPlayers", g_battleShowPlayers);
+			g_battleShowMonsters = readFilter(config, "ShowMonsters", g_battleShowMonsters);
+			g_battleShowNpcs = readFilter(config, "ShowNpcs", g_battleShowNpcs);
+		}
+		g_battleFiltersLoaded = true;
+	}
+
+	void saveBattleFilters()
+	{
+		Config config;
+		if(!config.openToSave((g_prefPath + "battlelist.cfg").c_str()))
+			return;
+		config.insertKey("ShowPlayers", g_battleShowPlayers ? "yes" : "no");
+		config.insertKey("ShowMonsters", g_battleShowMonsters ? "yes" : "no");
+		config.insertKey("ShowNpcs", g_battleShowNpcs ? "yes" : "no");
+	}
+}
 
 void battle_Events(Uint32 event, Sint32 status)
 {
@@ -270,6 +315,30 @@ void battle_Events(Uint32 event, Sint32 status)
 				g_engine.setBattleSortMethod(Sort_Descending_Name);
 				UTIL_sortBattleWindow();
 			}
+		}
+		break;
+		case BATTLE_FILTER_PLAYERS_EVENTID:
+		{
+			loadBattleFilters();
+			g_battleShowPlayers = !g_battleShowPlayers;
+			saveBattleFilters();
+			g_recreateBattleWindow = true;
+		}
+		break;
+		case BATTLE_FILTER_MONSTERS_EVENTID:
+		{
+			loadBattleFilters();
+			g_battleShowMonsters = !g_battleShowMonsters;
+			saveBattleFilters();
+			g_recreateBattleWindow = true;
+		}
+		break;
+		case BATTLE_FILTER_NPCS_EVENTID:
+		{
+			loadBattleFilters();
+			g_battleShowNpcs = !g_battleShowNpcs;
+			saveBattleFilters();
+			g_recreateBattleWindow = true;
 		}
 		break;
 
@@ -541,7 +610,16 @@ void UTIL_refreshPartyWindow()
 
 bool CanSeeOnBattle(Creature* creature)
 {
-	return !creature->isLocalCreature() && creature->isVisible();
+	loadBattleFilters();
+	if(!creature || creature->isLocalCreature() || !creature->isVisible())
+		return false;
+	if(creature->isPlayer())
+		return g_battleShowPlayers;
+	if(creature->isNPC())
+		return g_battleShowNpcs;
+	if(creature->isMonster())
+		return g_battleShowMonsters;
+	return true;
 }
 
 void UTIL_attackNextBattleCreature()
@@ -686,6 +764,7 @@ void UTIL_toggleBattleWindow()
 
 void UTIL_createBattlePopupMenu(Sint32 x, Sint32 y)
 {
+	loadBattleFilters();
 	SortMethods sortMethod = g_engine.getBattleSortMethod();
 	GUI_ContextMenu* newMenu = new GUI_ContextMenu();
 	newMenu->addContextMenu((sortMethod == Sort_Ascending_Time ? CONTEXTMENU_STYLE_CHECKED : CONTEXTMENU_STYLE_UNCHECKED), SORT_ASCENDING_TIME_EVENTID, "Sort Ascending by Display Time", "");
@@ -696,6 +775,10 @@ void UTIL_createBattlePopupMenu(Sint32 x, Sint32 y)
 	newMenu->addContextMenu((sortMethod == Sort_Descending_HP ? CONTEXTMENU_STYLE_CHECKED : CONTEXTMENU_STYLE_UNCHECKED), SORT_DESCENDING_HEALTH_EVENTID, "Sort Descending by Hit Points", "");
 	newMenu->addContextMenu((sortMethod == Sort_Ascending_Name ? CONTEXTMENU_STYLE_CHECKED : CONTEXTMENU_STYLE_UNCHECKED), SORT_ASCENDING_NAME_EVENTID, "Sort Ascending by Name", "");
 	newMenu->addContextMenu((sortMethod == Sort_Descending_Name ? CONTEXTMENU_STYLE_CHECKED : CONTEXTMENU_STYLE_UNCHECKED), SORT_DESCENDING_NAME_EVENTID, "Sort Descending by Name", "");
+	newMenu->addSeparator();
+	newMenu->addContextMenu((g_battleShowPlayers ? CONTEXTMENU_STYLE_CHECKED : CONTEXTMENU_STYLE_UNCHECKED), BATTLE_FILTER_PLAYERS_EVENTID, "Mostrar jogadores", "");
+	newMenu->addContextMenu((g_battleShowMonsters ? CONTEXTMENU_STYLE_CHECKED : CONTEXTMENU_STYLE_UNCHECKED), BATTLE_FILTER_MONSTERS_EVENTID, "Mostrar monstros", "");
+	newMenu->addContextMenu((g_battleShowNpcs ? CONTEXTMENU_STYLE_CHECKED : CONTEXTMENU_STYLE_UNCHECKED), BATTLE_FILTER_NPCS_EVENTID, "Mostrar NPCs", "");
 	newMenu->setEventCallback(&battle_Events);
 	g_engine.showContextMenu(newMenu, x, y);
 }

@@ -40,7 +40,12 @@ void UTIL_graphicsOptions();
 void UTIL_advancedGraphicsOptions();
 void UTIL_consoleOptions();
 void UTIL_hotkeyOptions();
+bool UTIL_isHotkeyCaptureActive();
+void UTIL_hotkeyCaptureKeyDown(SDL_Event& event);
 void UTIL_assistantOptions();
+void UTIL_autoRuneOptions();
+void UTIL_caveBotOptions();
+void UTIL_caveBotWaypointRecorded(const std::string& description);
 
 //Help window
 void UTIL_help();

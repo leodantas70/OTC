@@ -105,6 +105,9 @@
     <ClCompile Include="..\..\assistant.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+	<ClCompile Include="..\..\cavebot.cpp">
+	  <Filter>Source Files</Filter>
+	</ClCompile>
     <ClCompile Include="..\..\staticText.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -240,6 +243,9 @@
     <ClCompile Include="..\..\GUI\AssistantOptions.cpp">
       <Filter>Source Files\GUI</Filter>
     </ClCompile>
+	<ClCompile Include="..\..\GUI\CaveBotOptions.cpp">
+	  <Filter>Source Files\GUI</Filter>
+	</ClCompile>
     <ClCompile Include="..\..\GUI\GraphicsOptions.cpp">
       <Filter>Source Files\GUI</Filter>
     </ClCompile>

@@ -20,6 +20,7 @@
 */
 
 #include "GUI_UTIL.h"
+#include "../cavebot.h"
 #include "../engine.h"
 #include "../GUI_Elements/GUI_Panel.h"
 #include "../GUI_Elements/GUI_PanelWindow.h"
@@ -78,6 +79,10 @@
 #define BUTTONS_PARTY_DESCRIPTION1 "Open party list"
 #define BUTTONS_PARTY_DESCRIPTION2 "Close party list"
 #define BUTTONS_PARTY_EVENTID 1017
+#define BUTTONS_CAVEBOT_EVENTID 1018
+#define BUTTONS_BOT_TOGGLE_EVENTID 1019
+#define BUTTONS_ASSISTANT_EVENTID 1020
+#define BUTTONS_AUTORUNE_EVENTID 1021
 
 extern Engine g_engine;
 extern Game g_game;
@@ -119,6 +124,16 @@ void buttons_Events(Uint32 event, Sint32)
 		case BUTTONS_LEADERBOARD_EVENTID: break;
 		case BUTTONS_FRIENDS_EVENTID: break;
 		case BUTTONS_PARTY_EVENTID: UTIL_togglePartyWindow(); break;
+		case BUTTONS_CAVEBOT_EVENTID: UTIL_caveBotOptions(); break;
+		case BUTTONS_ASSISTANT_EVENTID: UTIL_assistantOptions(); break;
+		case BUTTONS_AUTORUNE_EVENTID: UTIL_autoRuneOptions(); break;
+		case BUTTONS_BOT_TOGGLE_EVENTID:
+		{
+			g_caveBot.setEnabled(!g_caveBot.isEnabled());
+			UTIL_createButtonsPanel();
+			g_engine.recalculateGameWindow();
+		}
+		break;
 		default: break;
 	}
 }
@@ -140,7 +155,7 @@ void UTIL_createButtonsPanel()
 		else if(g_clientVersion >= 1102)
 			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, 48), false, GUI_PANEL_WINDOW_BUTTONS);
 		else
-			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, 26), false, GUI_PANEL_WINDOW_BUTTONS);
+			pPanel = new GUI_PanelWindow(iRect(0, 0, GAME_PANEL_FIXED_WIDTH - 4, 70), false, GUI_PANEL_WINDOW_BUTTONS);
 	}
 
 	if(g_clientVersion >= 1220)
@@ -591,23 +606,43 @@ void UTIL_createButtonsPanel()
 	}
 	else
 	{
-		GUI_RadioButton* newRadioButton = new GUI_RadioButton(iRect(8, 3, GUI_UI_BUTTON_34PX_GRAY_UP_W, GUI_UI_BUTTON_34PX_GRAY_UP_H), BUTTONS_SKILLS_TITLE, 0, BUTTONS_SKILLS_DESCRIPTION1);
+		GUI_Button* caveButton = new GUI_Button(iRect(8, 3, GUI_UI_BUTTON_58PX_GRAY_UP_W, GUI_UI_BUTTON_58PX_GRAY_UP_H), "CaveBot", 0, "Abrir configuracoes do CaveBot");
+		caveButton->setButtonEventCallback(&buttons_Events, BUTTONS_CAVEBOT_EVENTID);
+		caveButton->startEvents();
+		pPanel->addChild(caveButton);
+		if(g_caveBot.isEnabled())
+			caveButton = new GUI_Button(iRect(68, 3, GUI_UI_BUTTON_43PX_GREEN_UP_W, GUI_UI_BUTTON_43PX_GREEN_UP_H), "Bot ON", 0, "Desligar CaveBot");
+		else
+			caveButton = new GUI_Button(iRect(68, 3, GUI_UI_BUTTON_43PX_RED_UP_W, GUI_UI_BUTTON_43PX_RED_UP_H), "Bot OFF", 0, "Ligar CaveBot");
+		caveButton->setButtonEventCallback(&buttons_Events, BUTTONS_BOT_TOGGLE_EVENTID);
+		caveButton->startEvents();
+		pPanel->addChild(caveButton);
+		GUI_Button* assistantButton = new GUI_Button(iRect(112, 3, GUI_UI_BUTTON_58PX_GRAY_UP_W, GUI_UI_BUTTON_58PX_GRAY_UP_H), "Assist.", 0, "Abrir configuracoes do Assistant");
+		assistantButton->setButtonEventCallback(&buttons_Events, BUTTONS_ASSISTANT_EVENTID);
+		assistantButton->startEvents();
+		pPanel->addChild(assistantButton);
+
+		GUI_RadioButton* newRadioButton = new GUI_RadioButton(iRect(8, 25, GUI_UI_BUTTON_34PX_GRAY_UP_W, GUI_UI_BUTTON_34PX_GRAY_UP_H), BUTTONS_SKILLS_TITLE, 0, BUTTONS_SKILLS_DESCRIPTION1);
 		newRadioButton->setRadioEventCallback(&CheckSkillsWindowOpen, BUTTONS_SKILLS_DESCRIPTION2);
 		newRadioButton->setButtonEventCallback(&buttons_Events, BUTTONS_SKILLS_EVENTID);
 		newRadioButton->startEvents();
 		pPanel->addChild(newRadioButton);
-		newRadioButton = new GUI_RadioButton(iRect(45, 3, GUI_UI_BUTTON_34PX_GRAY_UP_W, GUI_UI_BUTTON_34PX_GRAY_UP_H), BUTTONS_BATTLE_TITLE, 0, BUTTONS_BATTLE_DESCRIPTION1);
+		newRadioButton = new GUI_RadioButton(iRect(45, 25, GUI_UI_BUTTON_34PX_GRAY_UP_W, GUI_UI_BUTTON_34PX_GRAY_UP_H), BUTTONS_BATTLE_TITLE, 0, BUTTONS_BATTLE_DESCRIPTION1);
 		newRadioButton->setRadioEventCallback(&CheckBattleWindowOpen, BUTTONS_BATTLE_DESCRIPTION2);
 		newRadioButton->setButtonEventCallback(&buttons_Events, BUTTONS_BATTLE_EVENTID);
 		newRadioButton->startEvents();
 		pPanel->addChild(newRadioButton);
-		newRadioButton = new GUI_RadioButton(iRect(82, 3, GUI_UI_BUTTON_34PX_GRAY_UP_W, GUI_UI_BUTTON_34PX_GRAY_UP_H), BUTTONS_VIP_TITLE, 0, BUTTONS_VIP_DESCRIPTION1);
+		newRadioButton = new GUI_RadioButton(iRect(82, 25, GUI_UI_BUTTON_34PX_GRAY_UP_W, GUI_UI_BUTTON_34PX_GRAY_UP_H), BUTTONS_VIP_TITLE, 0, BUTTONS_VIP_DESCRIPTION1);
 		newRadioButton->setRadioEventCallback(&CheckVIPWindowOpen, BUTTONS_VIP_DESCRIPTION2);
 		newRadioButton->setButtonEventCallback(&buttons_Events, BUTTONS_VIP_EVENTID);
 		newRadioButton->startEvents();
 		pPanel->addChild(newRadioButton);
-		GUI_Button* newButton = new GUI_Button(iRect(124, 3, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), BUTTONS_LOGOUT_TITLE, 0, BUTTONS_LOGOUT_DESCRIPTION);
+		GUI_Button* newButton = new GUI_Button(iRect(124, 25, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), BUTTONS_LOGOUT_TITLE, 0, BUTTONS_LOGOUT_DESCRIPTION);
 		newButton->setButtonEventCallback(&buttons_Events, BUTTONS_LOGOUT_EVENTID);
+		newButton->startEvents();
+		pPanel->addChild(newButton);
+		newButton = new GUI_Button(iRect(8, 47, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), "Rune", 0, "Abrir Auto Rune");
+		newButton->setButtonEventCallback(&buttons_Events, BUTTONS_AUTORUNE_EVENTID);
 		newButton->startEvents();
 		pPanel->addChild(newButton);
 	}

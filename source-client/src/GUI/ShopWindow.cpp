@@ -178,6 +178,17 @@ void UTIL_sortShopItems()
 		case Shop_Sort_Weight: std::sort(g_tempNPCItems.begin(), g_tempNPCItems.end(), [](NPCTradeItems& a, NPCTradeItems& b) -> bool {return a.itemWeight < b.itemWeight;}); break;
 		default: break;
 	}
+
+	// On the sell page keep everything the player can actually sell at the
+	// beginning of the list, while retaining the selected name/price/weight
+	// ordering inside both groups.
+	if(!g_buyNPCPage)
+	{
+		std::stable_partition(g_tempNPCItems.begin(), g_tempNPCItems.end(), [](const NPCTradeItems& item) -> bool
+		{
+			return UTIL_getShopSellQuantity(item.itemId) > 0;
+		});
+	}
 }
 
 void UTIL_recreateShopWindow(const std::string& name, Uint16 currencyId, GUI_PanelWindow* pPanel);
@@ -432,7 +443,11 @@ void shop_Events(Uint32 event, Sint32 status)
 		case SHOP_SELL_EQUIPPED_EVENTID:
 		{
 			g_engine.setIgnoreEquiped(!g_engine.getIgnoreEquiped());
-			UTIL_updateShopWindow();
+			GUI_PanelWindow* pPanel = g_engine.getPanel(GUI_PANEL_WINDOW_SHOP);
+			if(pPanel && !g_buyNPCPage)
+				UTIL_recreateShopWindow("", g_tempNPCCurrencyId, pPanel);
+			else
+				UTIL_updateShopWindow();
 		}
 		break;
 		default: break;
@@ -544,6 +559,17 @@ void UTIL_updateShopWindow()
 
 void UTIL_recreateShopWindow(const std::string& name, Uint16 currencyId, GUI_PanelWindow* pPanel)
 {
+	Uint16 selectedItemId = 0;
+	Uint8 selectedItemSubtype = 0;
+	bool restoreSelection = false;
+	if(g_NPCActiveOffer != SDL_static_cast(size_t, -1) && g_NPCActiveOffer < g_tempNPCItems.size())
+	{
+		NPCTradeItems& selectedItem = g_tempNPCItems[g_NPCActiveOffer];
+		selectedItemId = selectedItem.itemId;
+		selectedItemSubtype = selectedItem.itemSubtype;
+		restoreSelection = true;
+	}
+
 	g_CanNPCTrade = false;
 	g_NPCActiveOffer = SDL_static_cast(size_t, -1);
 	if(!name.empty())
@@ -746,14 +772,21 @@ void UTIL_recreateShopWindow(const std::string& name, Uint16 currencyId, GUI_Pan
 			if(condition)
 			{
 				Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "Price: %u, %u.%02u oz", price, tradeItem.itemWeight / 100, tradeItem.itemWeight % 100);
-				GUI_ShopSelectItem* newShopItem = new GUI_ShopSelectItem(iRect(0, PosY, 156, 36), tradeItem.itemName, std::string(g_buffer, SDL_static_cast(size_t, len)), tradeItem.itemId, tradeItem.itemSubtype, i);
+				bool available = (g_buyNPCPage || UTIL_getShopSellQuantity(tradeItem.itemId) > 0);
+				GUI_ShopSelectItem* newShopItem = new GUI_ShopSelectItem(iRect(0, PosY, 156, 36), tradeItem.itemName, std::string(g_buffer, SDL_static_cast(size_t, len)), tradeItem.itemId, tradeItem.itemSubtype, i, available);
 				newShopItem->startEvents();
 				pContainer->addChild(newShopItem, false);
+				if(restoreSelection && tradeItem.itemId == selectedItemId && tradeItem.itemSubtype == selectedItemSubtype)
+					g_NPCActiveOffer = i;
+
 				PosY += 36;
 			}
 		}
 		pContainer->validateScrollBar();
 	}
+
+	if(g_NPCActiveOffer != SDL_static_cast(size_t, -1))
+		UTIL_updateShopWindow();
 }
 
 void UTIL_createShopWindow(const std::string& name, Uint16 currencyId, void* itemsData)
@@ -813,7 +846,11 @@ void UTIL_goodsShopWindow(Uint64 playerMoney, void* itemsData)
 	NPCTradeGoods& npcGoods = *SDL_reinterpret_cast(NPCTradeGoods*, itemsData);
 	g_tempNPCGoods = std::move(npcGoods);
 	g_tempNPCMoney = playerMoney;
-	UTIL_updateShopWindow();
+	GUI_PanelWindow* pPanel = g_engine.getPanel(GUI_PANEL_WINDOW_SHOP);
+	if(pPanel && !g_buyNPCPage)
+		UTIL_recreateShopWindow("", g_tempNPCCurrencyId, pPanel);
+	else
+		UTIL_updateShopWindow();
 }
 
 void UTIL_closeShopWindow()
@@ -953,11 +990,16 @@ void GUI_ShopItem::render()
 		m_item->render(m_tRect.x1, m_tRect.y1, m_tRect.y2);
 }
 
-GUI_ShopSelectItem::GUI_ShopSelectItem(iRect boxRect, const std::string& itemName, const std::string& itemDescription, Uint16 itemId, Uint8 itemSubtype, size_t index, Uint32 internalID) :
-	m_name(iRect(0, 0, 110, 14), itemName), m_description(iRect(0, 0, 110, 14), itemDescription), m_index(index)
+GUI_ShopSelectItem::GUI_ShopSelectItem(iRect boxRect, const std::string& itemName, const std::string& itemDescription, Uint16 itemId, Uint8 itemSubtype, size_t index, bool available, Uint32 internalID) :
+	m_name(iRect(0, 0, 110, 14), itemName), m_description(iRect(0, 0, 110, 14), itemDescription), m_index(index), m_available(available)
 {
 	m_internalID = internalID;
 	m_item = ItemUI::createItemUI(itemId, SDL_static_cast(Uint16, itemSubtype));
+	if(!m_available)
+	{
+		m_name.setColor(112, 112, 112);
+		m_description.setColor(112, 112, 112);
+	}
 	setRect(boxRect);
 }
 
@@ -1011,6 +1053,8 @@ void GUI_ShopSelectItem::render()
 	renderer->drawPicture(GUI_UI_IMAGE, GUI_UI_INVENTORY_EMPTY_X, GUI_UI_INVENTORY_EMPTY_Y, m_tRect.x1 + 3, m_tRect.y1 + 1, 34, 34);
 	if(m_item)
 		m_item->render(m_tRect.x1 + 4, m_tRect.y1 + 2, 32);
+	if(!m_available)
+		renderer->fillRectangle(m_tRect.x1 + 4, m_tRect.y1 + 2, 32, 32, 64, 64, 64, 160);
 
 	m_name.render();
 	m_description.render();

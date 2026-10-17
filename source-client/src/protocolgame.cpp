@@ -20,6 +20,7 @@
 */
 
 #include "protocolgame.h"
+#include "cavebot.h"
 #include "engine.h"
 #include "thingManager.h"
 #include "rsa.h"
@@ -1798,6 +1799,8 @@ void ProtocolGame::parseCreatureHealth(InputMessage& msg)
 	Creature* creature = g_map.getCreatureById(creatureId);
 	if(creature)
 	{
+		if(health == 0 && creature->isMonster() && g_game.getAttackID() == creatureId)
+			g_caveBot.notifyCreatureDeath(creatureId, creature->getCurrentPosition());
 		creature->setHealth(health);
 
 		SortMethods sortMethod = g_engine.getBattleSortMethod();

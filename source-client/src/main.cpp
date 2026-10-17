@@ -21,6 +21,7 @@
 
 #include "engine.h"
 #include "assistant.h"
+#include "cavebot.h"
 #include "game.h"
 #include "cursors.h"
 #include "connection.h"
@@ -368,6 +369,7 @@ int main(int argc, char* argv[])
 		{
 			g_inited = true;
 			g_assistant.loadConfig();
+			g_caveBot.loadConfig();
 			startupDebugLog("main: g_engine.init ok");
 		}
 		else if(!g_inited && !engineInitFalseLogged)
@@ -641,6 +643,7 @@ int main(int argc, char* argv[])
 			if(g_connection)
 				g_connection->updateConnection();
 			g_assistant.tick();
+			g_caveBot.tick();
 
 			if(!g_active)
 			{

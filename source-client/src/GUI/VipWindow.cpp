@@ -1153,7 +1153,7 @@ void GUI_VipPlayer::onRMouseDown(Sint32, Sint32)
 
 void GUI_VipPlayer::onRMouseUp(Sint32 x, Sint32 y)
 {
-	if(g_vipRMouse && m_hover)
+	if(g_vipRMouse && m_hover && m_tRect.isPointInside(x, y))
 	{
 		VipAction action;
 		action.player.type = VIP_ACTION_PLAYER;
@@ -1161,6 +1161,7 @@ void GUI_VipPlayer::onRMouseUp(Sint32 x, Sint32 y)
 		UTIL_createVipPopupMenu(x, y, action);
 		g_vipRMouse = false;
 	}
+	m_hover = false;
 }
 
 void GUI_VipPlayer::setRect(iRect& NewRect)
@@ -1205,7 +1206,7 @@ void GUI_VipGroup::onRMouseDown(Sint32, Sint32)
 
 void GUI_VipGroup::onRMouseUp(Sint32 x, Sint32 y)
 {
-	if(g_vipRMouse && m_hover)
+	if(g_vipRMouse && m_hover && m_tRect.isPointInside(x, y))
 	{
 		VipAction action;
 		action.group.type = VIP_ACTION_GROUP;
@@ -1213,6 +1214,7 @@ void GUI_VipGroup::onRMouseUp(Sint32 x, Sint32 y)
 		UTIL_createVipPopupMenu(x, y, action);
 		g_vipRMouse = false;
 	}
+	m_hover = false;
 }
 
 void GUI_VipGroup::setRect(iRect& NewRect)

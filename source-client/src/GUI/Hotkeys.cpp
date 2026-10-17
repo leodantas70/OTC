@@ -33,10 +33,11 @@
 #include "itemUI.h"
 
 #include <memory>
+#include <utility>
 
 #define HOTKEYS_TITLE "Hotkey Options"
 #define HOTKEYS_WIDTH 285
-#define HOTKEYS_HEIGHT 385
+#define HOTKEYS_HEIGHT 438
 
 #define HOTKEYS_CANCEL_EVENTID 1000
 #define HOTKEYS_OK_EVENTID 1001
@@ -49,8 +50,13 @@
 #define HOTKEYS_USE_TARGET_EVENTID 1008
 #define HOTKEYS_CROSSHAIRS_EVENTID 1009
 #define HOTKEYS_OBJECT_DISPLAY_EVENTID 1010
-#define HOTKEYS_ADD_KEY_TEXTBOX_EVENTID 1011
 #define HOTKEYS_ADD_KEY_BUTTON_EVENTID 1012
+#define HOTKEYS_REMOVE_KEY_BUTTON_EVENTID 1013
+
+#define HOTKEY_CAPTURE_CANCEL_EVENTID 1050
+
+#define HOTKEY_CAPTURE_WIDTH 400
+#define HOTKEY_CAPTURE_HEIGHT 148
 
 #define HOTKEYS_LABEL_X 18
 #define HOTKEYS_LABEL_COLOR 223
@@ -59,22 +65,24 @@
 #define HOTKEYS_LIST_X 18
 #define HOTKEYS_LIST_Y 45
 #define HOTKEYS_LIST_W 252
-#define HOTKEYS_LIST_H 103
+#define HOTKEYS_LIST_H 113
 
-#define HOTKEYS_TEXT_LABEL_Y 162
+#define HOTKEYS_MANAGE_BUTTON_Y 166
+
+#define HOTKEYS_TEXT_LABEL_Y 203
 #define HOTKEYS_TEXTBOX_X 18
-#define HOTKEYS_TEXTBOX_Y 178
+#define HOTKEYS_TEXTBOX_Y 219
 #define HOTKEYS_TEXTBOX_W 252
 #define HOTKEYS_TEXTBOX_H 16
 
 #define HOTKEYS_SEND_AUTO_X 18
-#define HOTKEYS_SEND_AUTO_Y 208
+#define HOTKEYS_SEND_AUTO_Y 249
 #define HOTKEYS_SEND_AUTO_W 252
 #define HOTKEYS_SEND_AUTO_H 22
 
-#define HOTKEYS_OBJECT_LABEL_Y 242
+#define HOTKEYS_OBJECT_LABEL_Y 283
 #define HOTKEYS_OBJECT_BOX_X 18
-#define HOTKEYS_OBJECT_BOX_Y 258
+#define HOTKEYS_OBJECT_BOX_Y 299
 #define HOTKEYS_OBJECT_BOX_W 52
 #define HOTKEYS_OBJECT_BOX_H 52
 
@@ -120,37 +128,55 @@ static ClassicHotkeySlot classicHotkeySlots[CLASSIC_HOTKEY_MAX_SLOTS] =
 	{"F9:", SDLK_F9, KMOD_NONE},
 	{"F10:", SDLK_F10, KMOD_NONE},
 	{"F11:", SDLK_F11, KMOD_NONE},
-	{"F12:", SDLK_F12, KMOD_NONE},
-	{"Shift+F1:", SDLK_F1, KMOD_SHIFT},
-	{"Shift+F2:", SDLK_F2, KMOD_SHIFT},
-	{"Shift+F3:", SDLK_F3, KMOD_SHIFT},
-	{"Shift+F4:", SDLK_F4, KMOD_SHIFT},
-	{"Shift+F5:", SDLK_F5, KMOD_SHIFT},
-	{"Shift+F6:", SDLK_F6, KMOD_SHIFT},
-	{"Shift+F7:", SDLK_F7, KMOD_SHIFT},
-	{"Shift+F8:", SDLK_F8, KMOD_SHIFT},
-	{"Shift+F9:", SDLK_F9, KMOD_SHIFT},
-	{"Shift+F10:", SDLK_F10, KMOD_SHIFT},
-	{"Shift+F11:", SDLK_F11, KMOD_SHIFT},
-	{"Shift+F12:", SDLK_F12, KMOD_SHIFT},
-	{"Ctrl+F1:", SDLK_F1, KMOD_CTRL},
-	{"Ctrl+F2:", SDLK_F2, KMOD_CTRL},
-	{"Ctrl+F3:", SDLK_F3, KMOD_CTRL},
-	{"Ctrl+F4:", SDLK_F4, KMOD_CTRL},
-	{"Ctrl+F5:", SDLK_F5, KMOD_CTRL},
-	{"Ctrl+F6:", SDLK_F6, KMOD_CTRL},
-	{"Ctrl+F7:", SDLK_F7, KMOD_CTRL},
-	{"Ctrl+F8:", SDLK_F8, KMOD_CTRL},
-	{"Ctrl+F9:", SDLK_F9, KMOD_CTRL},
-	{"Ctrl+F10:", SDLK_F10, KMOD_CTRL},
-	{"Ctrl+F11:", SDLK_F11, KMOD_CTRL},
-	{"Ctrl+F12:", SDLK_F12, KMOD_CTRL}
+	{"F12:", SDLK_F12, KMOD_NONE}
 };
 
-static const size_t g_defaultClassicHotkeySlotCount = 36;
+static const size_t g_defaultClassicHotkeySlotCount = 12;
 static size_t g_classicHotkeySlotCount = g_defaultClassicHotkeySlotCount;
 static ClassicHotkeyEditState g_classicHotkeyEditStates[CLASSIC_HOTKEY_MAX_SLOTS];
 static Sint32 g_selectedClassicHotkey = 0;
+static std::vector<std::pair<SDL_Keycode, Uint16>> g_removedClassicHotkeys;
+static bool g_waitingHotkeyCapture = false;
+static SDL_Keycode g_preferredHotkeyKeycode = SDLK_UNKNOWN;
+static Uint16 g_preferredHotkeyModifiers = KMOD_NONE;
+
+void hotkey_Events(Uint32 event, Sint32 status);
+
+static Uint16 normalizeHotkeyModifiers(Uint16 modifiers)
+{
+	Uint16 normalized = KMOD_NONE;
+	if((modifiers & KMOD_CTRL) != 0)
+		normalized |= KMOD_CTRL;
+	if((modifiers & KMOD_SHIFT) != 0)
+		normalized |= KMOD_SHIFT;
+	if((modifiers & KMOD_ALT) != 0)
+		normalized |= KMOD_ALT;
+	return normalized;
+}
+
+static bool isModifierKey(SDL_Keycode keycode)
+{
+	return keycode == SDLK_LCTRL || keycode == SDLK_RCTRL ||
+		keycode == SDLK_LSHIFT || keycode == SDLK_RSHIFT ||
+		keycode == SDLK_LALT || keycode == SDLK_RALT ||
+		keycode == SDLK_LGUI || keycode == SDLK_RGUI;
+}
+
+static std::string formatHotkeyName(SDL_Keycode keycode, Uint16 modifiers, bool trailingColon)
+{
+	std::string displayName;
+	modifiers = normalizeHotkeyModifiers(modifiers);
+	if((modifiers & KMOD_CTRL) != 0)
+		displayName += "Ctrl+";
+	if((modifiers & KMOD_SHIFT) != 0)
+		displayName += "Shift+";
+	if((modifiers & KMOD_ALT) != 0)
+		displayName += "Alt+";
+	displayName += SDL_GetKeyName(keycode);
+	if(trailingColon)
+		displayName += ':';
+	return displayName;
+}
 
 class GUI_HotkeyItemBox : public GUI_Element
 {
@@ -201,11 +227,6 @@ static GUI_HotkeyItemBox* getHotkeyItemBox(GUI_Window* window)
 	return SDL_static_cast(GUI_HotkeyItemBox*, window->getChild(HOTKEYS_OBJECT_DISPLAY_EVENTID));
 }
 
-static GUI_TextBox* getAddHotkeyTextBox(GUI_Window* window)
-{
-	return SDL_static_cast(GUI_TextBox*, window->getChild(HOTKEYS_ADD_KEY_TEXTBOX_EVENTID));
-}
-
 static std::string trimHotkeyPart(const std::string& value)
 {
 	size_t first = value.find_first_not_of(" \t");
@@ -247,15 +268,8 @@ static bool parseCustomHotkey(const std::string& value, SDL_Keycode& keycode, Ui
 	if(keycode == SDLK_UNKNOWN || keycode == SDLK_LCTRL || keycode == SDLK_RCTRL || keycode == SDLK_LSHIFT || keycode == SDLK_RSHIFT || keycode == SDLK_LALT || keycode == SDLK_RALT)
 		return false;
 
-	displayName.clear();
-	if(modifiers & KMOD_CTRL)
-		displayName += "Ctrl+";
-	if(modifiers & KMOD_SHIFT)
-		displayName += "Shift+";
-	if(modifiers & KMOD_ALT)
-		displayName += "Alt+";
-	displayName += SDL_GetKeyName(keycode);
-	displayName += ':';
+	modifiers = normalizeHotkeyModifiers(modifiers);
+	displayName = formatHotkeyName(keycode, modifiers, true);
 	return true;
 }
 
@@ -293,10 +307,20 @@ static const char* getHotkeyItemActionColor(Uint8 usageType)
 
 static std::string getHotkeyListText(size_t index)
 {
-	std::string text = classicHotkeySlots[index].name;
+	// Keep the key name bright even while it has no action yet. Without an
+	// explicit color the generic list box renders unselected rows dimmed,
+	// which makes a newly added hotkey look disabled or missing.
+	std::string text("\x0E\xFF\xFF\xFF");
+	text += classicHotkeySlots[index].name;
 	if(!g_classicHotkeyEditStates[index].text.empty())
 	{
 		text += " ";
+		// Commands that are only placed in the chat input are intentionally
+		// dimmed. Automatically sent commands keep the normal bright color.
+		if(g_classicHotkeyEditStates[index].sendAutomatically)
+			text += "\x0E\xFF\xFF\xFF";
+		else
+			text += "\x0E\x90\x90\x90";
 		text += g_classicHotkeyEditStates[index].text;
 	}
 	else if(g_classicHotkeyEditStates[index].itemId != 0)
@@ -304,8 +328,8 @@ static std::string getHotkeyListText(size_t index)
 		text += " ";
 		text += getHotkeyItemActionColor(g_classicHotkeyEditStates[index].itemUsageType);
 		text += getHotkeyItemActionText(g_classicHotkeyEditStates[index].itemUsageType);
-		text += "\x0F";
 	}
+	text += "\x0F";
 	return text;
 }
 
@@ -321,11 +345,12 @@ static void refreshHotkeyList(GUI_Window* window)
 
 static void loadHotkeyEditorState()
 {
+	g_removedClassicHotkeys.clear();
 	g_classicHotkeySlotCount = g_defaultClassicHotkeySlotCount;
 	const std::vector<HotkeyUsage>& hotkeys = g_engine.getHotkeys();
 	for(std::vector<HotkeyUsage>::const_iterator it = hotkeys.begin(), end = hotkeys.end(); it != end && g_classicHotkeySlotCount < CLASSIC_HOTKEY_MAX_SLOTS; ++it)
 	{
-		if(it->hotkey != CLIENT_HOTKEY_ACTION || it->action.type == CLIENT_HOTKEY_ACTION_NONE || findClassicHotkeySlot(it->keycode, it->modifers) >= 0 || g_engine.getHotkey(it->keycode, it->modifers) != &(*it))
+		if(it->hotkey != CLIENT_HOTKEY_ACTION || findClassicHotkeySlot(it->keycode, it->modifers) >= 0 || g_engine.getHotkey(it->keycode, it->modifers) != &(*it))
 			continue;
 
 		std::string displayName;
@@ -425,6 +450,8 @@ static void saveEditedHotkeys(GUI_Window* window)
 		return;
 
 	storeCurrentEditorWidgets(window);
+	for(std::vector<std::pair<SDL_Keycode, Uint16>>::const_iterator it = g_removedClassicHotkeys.begin(), end = g_removedClassicHotkeys.end(); it != end; ++it)
+		g_engine.removeHotkeyAction(it->first, it->second);
 
 	for(size_t i = 0; i < g_classicHotkeySlotCount; ++i)
 	{
@@ -441,6 +468,121 @@ static void saveEditedHotkeys(GUI_Window* window)
 		else
 			g_engine.bindHotkeyAction(classicHotkeySlots[i].keycode, classicHotkeySlots[i].modifiers, "", false);
 	}
+
+	// Persist custom slots immediately. Empty slots have no action payload,
+	// so saveCFG also writes their key separately as HotkeySlot.
+	g_engine.saveCFG();
+}
+
+static void openHotkeyCaptureWindow()
+{
+	GUI_Window* oldCapture = g_engine.getWindow(GUI_WINDOW_HOTKEYCAPTURE);
+	if(oldCapture)
+		g_engine.removeWindow(oldCapture);
+
+	g_waitingHotkeyCapture = true;
+	GUI_Window* captureWindow = new GUI_Window(iRect(0, 0, HOTKEY_CAPTURE_WIDTH, HOTKEY_CAPTURE_HEIGHT), "Adicionar Hotkey", GUI_WINDOW_HOTKEYCAPTURE);
+
+	GUI_Label* label = new GUI_Label(iRect(HOTKEY_CAPTURE_WIDTH / 2, 31, 0, 0), "Pressione a tecla ou combinacao que deseja adicionar:", 0, 223, 223, 223);
+	label->setAlign(CLIENT_FONT_ALIGN_CENTER);
+	captureWindow->addChild(label);
+
+	label = new GUI_Label(iRect(HOTKEY_CAPTURE_WIDTH / 2, 59, 0, 0), "Aguardando uma tecla...", 0, 160, 160, 160);
+	label->setAlign(CLIENT_FONT_ALIGN_CENTER);
+	captureWindow->addChild(label);
+
+	label = new GUI_Label(iRect(HOTKEY_CAPTURE_WIDTH / 2, 87, 0, 0), "Exemplos: 1, Q, F8, Shift+Q ou Ctrl+1.", 0, 180, 180, 180);
+	label->setAlign(CLIENT_FONT_ALIGN_CENTER);
+	captureWindow->addChild(label);
+
+	GUI_Separator* separator = new GUI_Separator(iRect(13, HOTKEY_CAPTURE_HEIGHT - 40, HOTKEY_CAPTURE_WIDTH - 26, 2));
+	captureWindow->addChild(separator);
+
+	GUI_Button* button = new GUI_Button(iRect((HOTKEY_CAPTURE_WIDTH - GUI_UI_BUTTON_58PX_GRAY_UP_W) / 2, HOTKEY_CAPTURE_HEIGHT - 30, GUI_UI_BUTTON_58PX_GRAY_UP_W, GUI_UI_BUTTON_58PX_GRAY_UP_H), "Cancel", CLIENT_GUI_ESCAPE_TRIGGER);
+	button->setButtonEventCallback(&hotkey_Events, HOTKEY_CAPTURE_CANCEL_EVENTID);
+	button->startEvents();
+	captureWindow->addChild(button);
+
+	g_engine.addWindow(captureWindow, true);
+}
+
+static void addCapturedHotkeyToEditor(SDL_Keycode keycode, Uint16 modifiers)
+{
+	GUI_Window* window = g_engine.getWindow(GUI_WINDOW_HOTKEYS);
+	if(!window)
+		return;
+
+	if(keycode == SDLK_SPACE && modifiers == KMOD_NONE)
+	{
+		g_game.processTextMessage(MessageFailure, "Space esta reservado para atacar o proximo alvo da Battle List.");
+		return;
+	}
+
+	storeCurrentEditorWidgets(window);
+	Sint32 slot = findClassicHotkeySlot(keycode, modifiers);
+	GUI_ListBox* listBox = SDL_static_cast(GUI_ListBox*, window->getChild(HOTKEYS_LISTBOX_EVENTID));
+	if(slot < 0)
+	{
+		if(g_classicHotkeySlotCount >= CLASSIC_HOTKEY_MAX_SLOTS)
+		{
+			g_game.processTextMessage(MessageFailure, "Limite de hotkeys personalizadas atingido.");
+			return;
+		}
+
+		slot = SDL_static_cast(Sint32, g_classicHotkeySlotCount++);
+		classicHotkeySlots[slot].name = formatHotkeyName(keycode, modifiers, true);
+		classicHotkeySlots[slot].keycode = keycode;
+		classicHotkeySlots[slot].modifiers = modifiers;
+		g_classicHotkeyEditStates[slot] = ClassicHotkeyEditState();
+		if(listBox)
+			listBox->add(getHotkeyListText(SDL_static_cast(size_t, slot)));
+	}
+
+	for(std::vector<std::pair<SDL_Keycode, Uint16>>::iterator it = g_removedClassicHotkeys.begin(); it != g_removedClassicHotkeys.end();)
+	{
+		if(it->first == keycode && it->second == modifiers)
+			it = g_removedClassicHotkeys.erase(it);
+		else
+			++it;
+	}
+
+	refreshHotkeyList(window);
+	refreshHotkeyEditor(window, slot);
+	g_preferredHotkeyKeycode = keycode;
+	g_preferredHotkeyModifiers = modifiers;
+	if(listBox)
+		listBox->setSelect(slot);
+
+	g_game.processTextMessage(MessageLogin, std::string("Hotkey ") + formatHotkeyName(keycode, modifiers, false) + " adicionada. Configure a acao e clique em Ok.");
+}
+
+bool UTIL_isHotkeyCaptureActive()
+{
+	return g_waitingHotkeyCapture;
+}
+
+void UTIL_hotkeyCaptureKeyDown(SDL_Event& event)
+{
+	if(!g_waitingHotkeyCapture || event.key.repeat != 0)
+		return;
+
+	GUI_Window* captureWindow = g_engine.getWindow(GUI_WINDOW_HOTKEYCAPTURE);
+	if(event.key.keysym.sym == SDLK_ESCAPE && normalizeHotkeyModifiers(event.key.keysym.mod) == KMOD_NONE)
+	{
+		g_waitingHotkeyCapture = false;
+		if(captureWindow)
+			g_engine.removeWindow(captureWindow);
+		return;
+	}
+	if(isModifierKey(event.key.keysym.sym))
+		return;
+
+	SDL_Keycode keycode = event.key.keysym.sym;
+	Uint16 modifiers = normalizeHotkeyModifiers(event.key.keysym.mod);
+	g_waitingHotkeyCapture = false;
+	if(captureWindow)
+		g_engine.removeWindow(captureWindow);
+	addCapturedHotkeyToEditor(keycode, modifiers);
 }
 
 void hotkey_Events(Uint32 event, Sint32 status)
@@ -455,6 +597,11 @@ void hotkey_Events(Uint32 event, Sint32 status)
 				storeCurrentEditorWidgets(pWindow);
 				refreshHotkeyList(pWindow);
 				refreshHotkeyEditor(pWindow, status);
+				if(status >= 0 && SDL_static_cast(size_t, status) < g_classicHotkeySlotCount)
+				{
+					g_preferredHotkeyKeycode = classicHotkeySlots[status].keycode;
+					g_preferredHotkeyModifiers = classicHotkeySlots[status].modifiers;
+				}
 			}
 		}
 		break;
@@ -471,48 +618,65 @@ void hotkey_Events(Uint32 event, Sint32 status)
 		case HOTKEYS_ADD_KEY_BUTTON_EVENTID:
 		{
 			GUI_Window* pWindow = g_engine.getCurrentWindow();
-			GUI_TextBox* addTextBox = (pWindow ? getAddHotkeyTextBox(pWindow) : NULL);
-			if(pWindow && pWindow->getInternalID() == GUI_WINDOW_HOTKEYS && addTextBox)
+			if(pWindow && pWindow->getInternalID() == GUI_WINDOW_HOTKEYS)
 			{
-				SDL_Keycode keycode;
-				Uint16 modifiers;
-				std::string displayName;
-				if(!parseCustomHotkey(addTextBox->getActualText(), keycode, modifiers, displayName))
-				{
-					g_game.processTextMessage(MessageFailure, "Tecla invalida. Exemplos: 1, Q, Space, Shift+Q ou Ctrl+1.");
-					break;
-				}
-				if(keycode == SDLK_SPACE && modifiers == KMOD_NONE)
-				{
-					g_game.processTextMessage(MessageFailure, "Space esta reservado para atacar o proximo alvo da Battle List.");
-					break;
-				}
-
 				storeCurrentEditorWidgets(pWindow);
-				Sint32 slot = findClassicHotkeySlot(keycode, modifiers);
-				GUI_ListBox* listBox = SDL_static_cast(GUI_ListBox*, pWindow->getChild(HOTKEYS_LISTBOX_EVENTID));
-				if(slot < 0)
+				openHotkeyCaptureWindow();
+			}
+		}
+		break;
+		case HOTKEYS_SEND_AUTO_EVENTID:
+		{
+			GUI_Window* pWindow = g_engine.getCurrentWindow();
+			if(pWindow && pWindow->getInternalID() == GUI_WINDOW_HOTKEYS)
+			{
+				storeCurrentEditorWidgets(pWindow);
+				refreshHotkeyList(pWindow);
+			}
+		}
+		break;
+		case HOTKEYS_REMOVE_KEY_BUTTON_EVENTID:
+		{
+			GUI_Window* pWindow = g_engine.getCurrentWindow();
+			if(pWindow && pWindow->getInternalID() == GUI_WINDOW_HOTKEYS)
+			{
+				storeCurrentEditorWidgets(pWindow);
+				Sint32 select = UTIL_max<Sint32>(0, UTIL_min<Sint32>(SDL_static_cast(Sint32, g_classicHotkeySlotCount) - 1, g_selectedClassicHotkey));
+				if(SDL_static_cast(size_t, select) < g_defaultClassicHotkeySlotCount)
 				{
-					if(g_classicHotkeySlotCount >= CLASSIC_HOTKEY_MAX_SLOTS)
-					{
-						g_game.processTextMessage(MessageFailure, "Limite de hotkeys personalizadas atingido.");
-						break;
-					}
-					slot = SDL_static_cast(Sint32, g_classicHotkeySlotCount++);
-					classicHotkeySlots[slot].name = displayName;
-					classicHotkeySlots[slot].keycode = keycode;
-					classicHotkeySlots[slot].modifiers = modifiers;
-					g_classicHotkeyEditStates[slot] = ClassicHotkeyEditState();
-					if(listBox)
-						listBox->add(getHotkeyListText(SDL_static_cast(size_t, slot)));
+					g_classicHotkeyEditStates[select] = ClassicHotkeyEditState();
+					refreshHotkeyList(pWindow);
+					refreshHotkeyEditor(pWindow, select);
+					break;
 				}
 
-				refreshHotkeyList(pWindow);
-				refreshHotkeyEditor(pWindow, slot);
+				g_removedClassicHotkeys.push_back(std::make_pair(classicHotkeySlots[select].keycode, classicHotkeySlots[select].modifiers));
+				for(size_t i = SDL_static_cast(size_t, select); i + 1 < g_classicHotkeySlotCount; ++i)
+				{
+					classicHotkeySlots[i] = classicHotkeySlots[i + 1];
+					g_classicHotkeyEditStates[i] = g_classicHotkeyEditStates[i + 1];
+				}
+				--g_classicHotkeySlotCount;
+				Sint32 nextSelect = UTIL_min<Sint32>(select, SDL_static_cast(Sint32, g_classicHotkeySlotCount) - 1);
+				g_preferredHotkeyKeycode = classicHotkeySlots[nextSelect].keycode;
+				g_preferredHotkeyModifiers = classicHotkeySlots[nextSelect].modifiers;
+				refreshHotkeyEditor(pWindow, nextSelect);
+				GUI_ListBox* listBox = SDL_static_cast(GUI_ListBox*, pWindow->getChild(HOTKEYS_LISTBOX_EVENTID));
 				if(listBox)
-					listBox->setSelect(slot);
-				addTextBox->setText("");
+				{
+					listBox->erase(select);
+					refreshHotkeyList(pWindow);
+					listBox->setSelect(nextSelect);
+				}
 			}
+		}
+		break;
+		case HOTKEY_CAPTURE_CANCEL_EVENTID:
+		{
+			g_waitingHotkeyCapture = false;
+			GUI_Window* pWindow = g_engine.getCurrentWindow();
+			if(pWindow && pWindow->getInternalID() == GUI_WINDOW_HOTKEYCAPTURE)
+				g_engine.removeWindow(pWindow);
 		}
 		break;
 		case HOTKEYS_SELECT_OBJECT_EVENTID:
@@ -593,6 +757,13 @@ void UTIL_hotkeyOptions()
 		g_engine.removeWindow(pWindow);
 
 	loadHotkeyEditorState();
+	Sint32 initialSelect = 0;
+	if(g_preferredHotkeyKeycode != SDLK_UNKNOWN)
+	{
+		Sint32 preferredSelect = findClassicHotkeySlot(g_preferredHotkeyKeycode, g_preferredHotkeyModifiers);
+		if(preferredSelect >= 0)
+			initialSelect = preferredSelect;
+	}
 
 	GUI_Window* newWindow = new GUI_Window(iRect(0, 0, HOTKEYS_WIDTH, HOTKEYS_HEIGHT), HOTKEYS_TITLE, GUI_WINDOW_HOTKEYS);
 
@@ -603,19 +774,19 @@ void UTIL_hotkeyOptions()
 	for(size_t i = 0; i < g_classicHotkeySlotCount; ++i)
 		newListBox->add(getHotkeyListText(i));
 	newListBox->setEventCallback(&hotkey_Events, HOTKEYS_LISTBOX_EVENTID);
-	newListBox->setSelect(0);
+	newListBox->setSelect(initialSelect);
 	newListBox->startEvents();
 	newWindow->addChild(newListBox);
 
-	GUI_TextBox* addKeyTextBox = new GUI_TextBox(iRect(113, 25, 87, 16), "", HOTKEYS_ADD_KEY_TEXTBOX_EVENTID, 223, 223, 223);
-	addKeyTextBox->setMaxLength(32);
-	addKeyTextBox->startEvents();
-	newWindow->addChild(addKeyTextBox);
-
-	GUI_Button* addKeyButton = new GUI_Button(iRect(212, 23, GUI_UI_BUTTON_58PX_GRAY_UP_W, GUI_UI_BUTTON_58PX_GRAY_UP_H), "Add", HOTKEYS_ADD_KEY_BUTTON_EVENTID);
+	GUI_Button* addKeyButton = new GUI_Button(iRect(HOTKEYS_LIST_X, HOTKEYS_MANAGE_BUTTON_Y, GUI_UI_BUTTON_58PX_GRAY_UP_W, GUI_UI_BUTTON_58PX_GRAY_UP_H), "Add", HOTKEYS_ADD_KEY_BUTTON_EVENTID);
 	addKeyButton->setButtonEventCallback(&hotkey_Events, HOTKEYS_ADD_KEY_BUTTON_EVENTID);
 	addKeyButton->startEvents();
 	newWindow->addChild(addKeyButton);
+
+	GUI_Button* removeKeyButton = new GUI_Button(iRect(HOTKEYS_LIST_X + 68, HOTKEYS_MANAGE_BUTTON_Y, GUI_UI_BUTTON_58PX_GRAY_UP_W, GUI_UI_BUTTON_58PX_GRAY_UP_H), "Remove", HOTKEYS_REMOVE_KEY_BUTTON_EVENTID);
+	removeKeyButton->setButtonEventCallback(&hotkey_Events, HOTKEYS_REMOVE_KEY_BUTTON_EVENTID);
+	removeKeyButton->startEvents();
+	newWindow->addChild(removeKeyButton);
 
 	newLabel = new GUI_Label(iRect(HOTKEYS_LABEL_X, HOTKEYS_TEXT_LABEL_Y, 0, 0), "Edit hotkey text:", 0, HOTKEYS_LABEL_COLOR, HOTKEYS_LABEL_COLOR, HOTKEYS_LABEL_COLOR);
 	newWindow->addChild(newLabel);
@@ -676,5 +847,5 @@ void UTIL_hotkeyOptions()
 	newWindow->addChild(newSeparator);
 
 	g_engine.addWindow(newWindow, true);
-	refreshHotkeyEditor(newWindow, 0);
+	refreshHotkeyEditor(newWindow, initialSelect);
 }
