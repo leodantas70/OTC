@@ -15,6 +15,8 @@
 #include "GUI/GUI_UTIL.h"
 #include "GUI/itemUI.h"
 
+#include <cctype>
+
 extern Engine g_engine;
 extern Game g_game;
 extern Map g_map;
@@ -80,61 +82,106 @@ namespace
 	{
 		return (value ? "yes" : "no");
 	}
+
+	std::string profileKey(const std::string& characterName)
+	{
+		std::string key;
+		bool separator = false;
+		for(unsigned char value : characterName)
+		{
+			if(std::isalnum(value))
+			{
+				key.push_back(SDL_static_cast(char, std::tolower(value)));
+				separator = false;
+			}
+			else if(!key.empty() && !separator)
+			{
+				key.push_back('-');
+				separator = true;
+			}
+		}
+		while(!key.empty() && key.back() == '-')
+			key.pop_back();
+		return key;
+	}
+
+	std::string assistantConfigPath(const std::string& characterName)
+	{
+		std::string key = profileKey(characterName);
+		return (key.empty() ? g_prefPath + "assistant.cfg" : g_prefPath + "assistant-" + key + ".cfg");
+	}
 }
 
 void Assistant::loadConfig()
 {
+	loadCharacterConfig(std::string());
+}
+
+void Assistant::loadCharacterConfig(const std::string& characterName)
+{
 	AssistantSettings settings;
-	Config config;
-	if(config.openToRead((g_prefPath + "assistant.cfg").c_str()))
+	Config profileConfig;
+	Config legacyConfig;
+	Config* config = &profileConfig;
+	bool loadedProfile = profileConfig.openToRead(assistantConfigPath(characterName).c_str());
+	bool loaded = loadedProfile;
+	if(!loaded && !characterName.empty())
 	{
-		settings.enabled = readBool(config, "Enabled", settings.enabled);
-		settings.fullLight = readBool(config, "FullLight", settings.fullLight);
-		settings.healingEnabled = readBool(config, "HealingEnabled", settings.healingEnabled);
-		settings.healingUseRune = readBool(config, "HealingUseRune", settings.healingUseRune);
-		settings.healingPercent = SDL_static_cast(Uint8, readNumber(config, "HealingPercent", settings.healingPercent, 100));
-		settings.healingSpell = readText(config, "HealingSpell", settings.healingSpell);
-		settings.healingRuneId = SDL_static_cast(Uint16, readNumber(config, "HealingRuneId", settings.healingRuneId, 65535));
-		settings.healingRuneSubtype = SDL_static_cast(Uint8, readNumber(config, "HealingRuneSubtype", settings.healingRuneSubtype, 255));
-		settings.hasteEnabled = readBool(config, "HasteEnabled", settings.hasteEnabled);
-		settings.hasteSpell = readText(config, "HasteSpell", settings.hasteSpell);
-		settings.manaEnabled = readBool(config, "ManaEnabled", settings.manaEnabled);
-		settings.manaPercent = SDL_static_cast(Uint8, readNumber(config, "ManaPercent", settings.manaPercent, 100));
-		settings.manaFluidId = SDL_static_cast(Uint16, readNumber(config, "ManaFluidId", settings.manaFluidId, 65535));
-		settings.manaFluidSubtype = SDL_static_cast(Uint8, readNumber(config, "ManaFluidSubtype", settings.manaFluidSubtype, 255));
-		settings.energyRingEnabled = readBool(config, "EnergyRingEnabled", settings.energyRingEnabled);
-		settings.energyRingEquipPercent = SDL_static_cast(Uint8, readNumber(config, "EnergyRingEquipPercent", settings.energyRingEquipPercent, 100));
-		settings.energyRingUnequipPercent = SDL_static_cast(Uint8, readNumber(config, "EnergyRingUnequipPercent", settings.energyRingUnequipPercent, 100));
-		settings.energyRingId = SDL_static_cast(Uint16, readNumber(config, "EnergyRingId", settings.energyRingId, 65535));
-		settings.energyRingSubtype = SDL_static_cast(Uint8, readNumber(config, "EnergyRingSubtype", settings.energyRingSubtype, 255));
-		settings.amuletEnabled = readBool(config, "AmuletEnabled", settings.amuletEnabled);
-		settings.amuletSwitchPercent = SDL_static_cast(Uint8, readNumber(config, "AmuletSwitchPercent", settings.amuletSwitchPercent, 100));
-		settings.lowHealthAmuletId = SDL_static_cast(Uint16, readNumber(config, "LowHealthAmuletId", settings.lowHealthAmuletId, 65535));
-		settings.lowHealthAmuletSubtype = SDL_static_cast(Uint8, readNumber(config, "LowHealthAmuletSubtype", settings.lowHealthAmuletSubtype, 255));
-		settings.highHealthAmuletId = SDL_static_cast(Uint16, readNumber(config, "HighHealthAmuletId", settings.highHealthAmuletId, 65535));
-		settings.highHealthAmuletSubtype = SDL_static_cast(Uint8, readNumber(config, "HighHealthAmuletSubtype", settings.highHealthAmuletSubtype, 255));
-		settings.ammunitionEnabled = readBool(config, "AmmunitionEnabled", settings.ammunitionEnabled);
-		settings.ammunitionId = SDL_static_cast(Uint16, readNumber(config, "AmmunitionId", settings.ammunitionId, 65535));
-		settings.autoRuneEnabled = readBool(config, "AutoRuneEnabled", settings.autoRuneEnabled);
-		settings.runeManaTraining = readBool(config, "RuneManaTraining", settings.runeManaTraining);
-		settings.runeSpell = readText(config, "RuneSpell", settings.runeSpell);
-		settings.runeMinimumMana = readNumber(config, "RuneMinimumMana", settings.runeMinimumMana, 1000000);
-		settings.runeAntiIdle = readBool(config, "RuneAntiIdle", settings.runeAntiIdle);
-		settings.runeAutoFood = readBool(config, "RuneAutoFood", settings.runeAutoFood);
-		settings.runeFoodIds = readText(config, "RuneFoodIds", settings.runeFoodIds);
-		settings.runeLogoutNoBlank = readBool(config, "RuneLogoutNoBlank", settings.runeLogoutNoBlank);
-		settings.blankRuneId = SDL_static_cast(Uint16, readNumber(config, "BlankRuneId", settings.blankRuneId, 65535));
-		settings.runeLogoutNonVip = readBool(config, "RuneLogoutNonVip", settings.runeLogoutNonVip);
+		loaded = legacyConfig.openToRead((g_prefPath + "assistant.cfg").c_str());
+		config = &legacyConfig;
+	}
+	if(loaded)
+	{
+		settings.enabled = readBool(*config, "Enabled", settings.enabled);
+		settings.fullLight = readBool(*config, "FullLight", settings.fullLight);
+		settings.healingEnabled = readBool(*config, "HealingEnabled", settings.healingEnabled);
+		settings.healingUseRune = readBool(*config, "HealingUseRune", settings.healingUseRune);
+		settings.healingPercent = SDL_static_cast(Uint8, readNumber(*config, "HealingPercent", settings.healingPercent, 100));
+		settings.healingSpell = readText(*config, "HealingSpell", settings.healingSpell);
+		settings.healingRuneId = SDL_static_cast(Uint16, readNumber(*config, "HealingRuneId", settings.healingRuneId, 65535));
+		settings.healingRuneSubtype = SDL_static_cast(Uint8, readNumber(*config, "HealingRuneSubtype", settings.healingRuneSubtype, 255));
+		settings.hasteEnabled = readBool(*config, "HasteEnabled", settings.hasteEnabled);
+		settings.hasteSpell = readText(*config, "HasteSpell", settings.hasteSpell);
+		settings.manaEnabled = readBool(*config, "ManaEnabled", settings.manaEnabled);
+		settings.manaPercent = SDL_static_cast(Uint8, readNumber(*config, "ManaPercent", settings.manaPercent, 100));
+		settings.manaFluidId = SDL_static_cast(Uint16, readNumber(*config, "ManaFluidId", settings.manaFluidId, 65535));
+		settings.manaFluidSubtype = SDL_static_cast(Uint8, readNumber(*config, "ManaFluidSubtype", settings.manaFluidSubtype, 255));
+		settings.energyRingEnabled = readBool(*config, "EnergyRingEnabled", settings.energyRingEnabled);
+		settings.energyRingEquipPercent = SDL_static_cast(Uint8, readNumber(*config, "EnergyRingEquipPercent", settings.energyRingEquipPercent, 100));
+		settings.energyRingUnequipPercent = SDL_static_cast(Uint8, readNumber(*config, "EnergyRingUnequipPercent", settings.energyRingUnequipPercent, 100));
+		settings.energyRingId = SDL_static_cast(Uint16, readNumber(*config, "EnergyRingId", settings.energyRingId, 65535));
+		settings.energyRingSubtype = SDL_static_cast(Uint8, readNumber(*config, "EnergyRingSubtype", settings.energyRingSubtype, 255));
+		settings.amuletEnabled = readBool(*config, "AmuletEnabled", settings.amuletEnabled);
+		settings.amuletSwitchPercent = SDL_static_cast(Uint8, readNumber(*config, "AmuletSwitchPercent", settings.amuletSwitchPercent, 100));
+		settings.lowHealthAmuletId = SDL_static_cast(Uint16, readNumber(*config, "LowHealthAmuletId", settings.lowHealthAmuletId, 65535));
+		settings.lowHealthAmuletSubtype = SDL_static_cast(Uint8, readNumber(*config, "LowHealthAmuletSubtype", settings.lowHealthAmuletSubtype, 255));
+		settings.highHealthAmuletId = SDL_static_cast(Uint16, readNumber(*config, "HighHealthAmuletId", settings.highHealthAmuletId, 65535));
+		settings.highHealthAmuletSubtype = SDL_static_cast(Uint8, readNumber(*config, "HighHealthAmuletSubtype", settings.highHealthAmuletSubtype, 255));
+		settings.ammunitionEnabled = readBool(*config, "AmmunitionEnabled", settings.ammunitionEnabled);
+		settings.ammunitionId = SDL_static_cast(Uint16, readNumber(*config, "AmmunitionId", settings.ammunitionId, 65535));
+		settings.autoRuneEnabled = readBool(*config, "AutoRuneEnabled", settings.autoRuneEnabled);
+		settings.runeManaTraining = readBool(*config, "RuneManaTraining", settings.runeManaTraining);
+		settings.runeSpell = readText(*config, "RuneSpell", settings.runeSpell);
+		settings.runeMinimumMana = readNumber(*config, "RuneMinimumMana", settings.runeMinimumMana, 1000000);
+		settings.runeAntiIdle = readBool(*config, "RuneAntiIdle", settings.runeAntiIdle);
+		settings.runeAutoFood = readBool(*config, "RuneAutoFood", settings.runeAutoFood);
+		settings.runeFoodIds = readText(*config, "RuneFoodIds", settings.runeFoodIds);
+		settings.runeLogoutNoBlank = readBool(*config, "RuneLogoutNoBlank", settings.runeLogoutNoBlank);
+		settings.blankRuneId = SDL_static_cast(Uint16, readNumber(*config, "BlankRuneId", settings.blankRuneId, 65535));
+		settings.runeLogoutNonVip = readBool(*config, "RuneLogoutNonVip", settings.runeLogoutNonVip);
 	}
 
+	m_profileCharacter = characterName;
 	m_configLoaded = true;
 	applySettings(settings);
+	if(!characterName.empty() && !loadedProfile)
+		saveConfig();
 }
 
 void Assistant::saveConfig()
 {
 	Config config;
-	if(!config.openToSave((g_prefPath + "assistant.cfg").c_str()))
+	if(!config.openToSave(assistantConfigPath(m_profileCharacter).c_str()))
 		return;
 
 	config.insertKey("Enabled", boolText(m_settings.enabled));
@@ -381,7 +428,7 @@ bool Assistant::useFood()
 	return false;
 }
 
-bool Assistant::hasNonVipPlayerOnScreen() const
+bool Assistant::hasPlayerWithoutFriendHeartOnScreen() const
 {
 	Creature* local = g_map.getLocalCreature();
 	if(!local)
@@ -394,7 +441,7 @@ bool Assistant::hasNonVipPlayerOnScreen() const
 			continue;
 		if(creature->getCurrentPosition().z != localPosition.z)
 			continue;
-		if(!UTIL_haveVipPlayer(creature->getName()))
+		if(!UTIL_isVipPlayerFriend(creature->getName()))
 			return true;
 	}
 	return false;
@@ -415,8 +462,8 @@ bool Assistant::checkAutoRuneSafety(Uint32 now)
 		return false;
 
 	const char* reason = NULL;
-	if(m_settings.runeLogoutNonVip && hasNonVipPlayerOnScreen())
-		reason = "Auto Rune: jogador fora da VIP na tela. Saindo do jogo.";
+	if(m_settings.runeLogoutNonVip && hasPlayerWithoutFriendHeartOnScreen())
+		reason = "Auto Rune: jogador sem coracao na VIP apareceu. Saindo do jogo.";
 	else if(m_settings.runeLogoutNoBlank && m_settings.blankRuneId != 0 && !hasItem(m_settings.blankRuneId))
 		reason = "Auto Rune: acabaram as blank runes abertas. Saindo do jogo.";
 
@@ -524,6 +571,7 @@ bool Assistant::shouldBlockTargetRune() const
 
 void Assistant::tick()
 {
+	ensureCharacterProfile();
 	if(!m_configLoaded)
 		return;
 
@@ -734,6 +782,16 @@ void Assistant::tick()
 		m_nextAction = now + ASSISTANT_ACTION_DELAY;
 		m_nextHaste = now + ASSISTANT_HASTE_DELAY;
 	}
+}
+
+void Assistant::ensureCharacterProfile()
+{
+	if(!g_engine.isIngame() || g_game.getPlayerID() == 0)
+		return;
+	Creature* local = g_map.getLocalCreature();
+	if(!local || local->getName().empty() || local->getName() == m_profileCharacter)
+		return;
+	loadCharacterConfig(local->getName());
 }
 
 void Assistant::resetRuntime()

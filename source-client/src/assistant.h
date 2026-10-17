@@ -69,6 +69,8 @@ class Assistant
 		void applySettings(const AssistantSettings& settings);
 
 	private:
+		void ensureCharacterProfile();
+		void loadCharacterConfig(const std::string& characterName);
 		void applyFullLight(bool enabled);
 		void castSpell(const std::string& spell);
 		bool useOnSelf(Uint16 itemId, Uint8 subtype);
@@ -79,7 +81,7 @@ class Assistant
 		bool findFreeContainerPosition(Position& position);
 		bool hasItem(Uint16 itemId) const;
 		bool useFood();
-		bool hasNonVipPlayerOnScreen() const;
+		bool hasPlayerWithoutFriendHeartOnScreen() const;
 		bool checkAutoRuneSafety(Uint32 now);
 		bool tickAutoRuneActions(Uint32 now);
 
@@ -103,6 +105,7 @@ class Assistant
 		bool m_energyRingActive = false;
 		Uint8 m_previousLightMode = 1;
 		bool m_configLoaded = false;
+		std::string m_profileCharacter;
 };
 
 extern Assistant g_assistant;

@@ -311,7 +311,7 @@ void UTIL_autoRuneOptions()
 	addCheckBox(window, 18, 213, 235, "Logout sem blank rune", settings.runeLogoutNoBlank, AUTORUNE_LOGOUT_BLANK_EVENTID);
 	addLabel(window, 260, 217, "ID:");
 	addTextBox(window, 282, 213, 65, numberText(settings.blankRuneId), AUTORUNE_BLANK_ID_EVENTID, 5, true);
-	addCheckBox(window, 18, 242, 300, "Logout ao aparecer jogador fora da VIP", settings.runeLogoutNonVip, AUTORUNE_LOGOUT_NONVIP_EVENTID);
+	addCheckBox(window, 18, 242, 300, "Logout ao aparecer jogador sem <3 na VIP", settings.runeLogoutNonVip, AUTORUNE_LOGOUT_NONVIP_EVENTID);
 	window->addChild(new GUI_Label(iRect(26, 271, 0, 0), "A protecao contra jogador inicia 8 segundos apos o login."));
 
 	window->addChild(new GUI_Separator(iRect(13, AUTORUNE_OPTIONS_HEIGHT - 40, AUTORUNE_OPTIONS_WIDTH - 26, 2)));

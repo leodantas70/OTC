@@ -147,6 +147,7 @@ void UTIL_addVipPlayer(Uint32 playerGUID, const std::string& playerName, const s
 void UTIL_changeVipStatus(Uint32 playerGUID, Uint8 status);
 void UTIL_changeVipGroups(std::vector<VipGroups>& groups, Uint8 createGroupsLeft);
 bool UTIL_haveVipPlayer(const std::string& name);
+bool UTIL_isVipPlayerFriend(const std::string& name);
 
 //Container widget
 void UTIL_createContainerWindow(Uint8 index);

@@ -120,40 +120,82 @@ namespace
 		// Item ids used by the 7.72 assets: gold, platinum and crystal coin.
 		return (itemId == 3031 || itemId == 3035 || itemId == 3043);
 	}
+
+	std::string profileKey(const std::string& characterName)
+	{
+		std::string key;
+		bool separator = false;
+		for(unsigned char value : characterName)
+		{
+			if(std::isalnum(value))
+			{
+				key.push_back(SDL_static_cast(char, std::tolower(value)));
+				separator = false;
+			}
+			else if(!key.empty() && !separator)
+			{
+				key.push_back('-');
+				separator = true;
+			}
+		}
+		while(!key.empty() && key.back() == '-')
+			key.pop_back();
+		return key;
+	}
+
+	std::string caveBotConfigPath(const std::string& characterName)
+	{
+		std::string key = profileKey(characterName);
+		return (key.empty() ? g_prefPath + "cavebot.cfg" : g_prefPath + "cavebot-" + key + ".cfg");
+	}
 }
 
 void CaveBot::loadConfig()
 {
+	loadCharacterConfig(std::string());
+}
+
+void CaveBot::loadCharacterConfig(const std::string& characterName)
+{
 	CaveBotSettings settings;
 	std::vector<CaveBotWaypoint> waypoints;
-	Config config;
-	if(config.openToRead((g_prefPath + "cavebot.cfg").c_str()))
+	Config profileConfig;
+	Config legacyConfig;
+	Config* config = &profileConfig;
+	bool loadedProfile = profileConfig.openToRead(caveBotConfigPath(characterName).c_str());
+	bool loaded = loadedProfile;
+	if(!loaded && !characterName.empty())
 	{
-		settings.enabled = readBool(config, "Enabled", settings.enabled);
-		settings.caveEnabled = readBool(config, "CaveEnabled", settings.caveEnabled);
-		settings.recordEnabled = readBool(config, "RecordEnabled", settings.recordEnabled);
-		settings.loop = readBool(config, "Loop", settings.loop);
-		settings.pauseWhileTarget = readBool(config, "PauseWhileTarget", settings.pauseWhileTarget);
-		settings.reachDistance = SDL_static_cast(Uint8, readNumber(config, "ReachDistance", settings.reachDistance, 5));
-		settings.retryDelay = readNumber(config, "RetryDelay", settings.retryDelay, 10000);
-		settings.targetEnabled = readBool(config, "TargetEnabled", settings.targetEnabled);
-		settings.targetNames = readText(config, "TargetNames", settings.targetNames);
-		settings.attackRuneId = SDL_static_cast(Uint16, readNumber(config, "AttackRuneId", settings.attackRuneId, 65535));
-		settings.attackRuneSubtype = SDL_static_cast(Uint8, readNumber(config, "AttackRuneSubtype", settings.attackRuneSubtype, 255));
-		settings.attackDelay = readNumber(config, "AttackDelay", settings.attackDelay, 10000);
-		settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, readNumber(config, "TargetMovement", settings.targetMovement, CAVEBOT_TARGET_DIAGONAL_DISTANCE_2));
-		settings.lootEnabled = readBool(config, "LootEnabled", settings.lootEnabled);
-		settings.lootGold = readBool(config, "LootGold", settings.lootGold);
-		settings.lootAfterKill = readBool(config, "LootAfterKill", settings.lootAfterKill);
-		settings.dropLootNoCapacity = readBool(config, "DropLootNoCapacity", settings.dropLootNoCapacity);
-		settings.lootItemIds = readText(config, "LootItemIds", settings.lootItemIds);
-		settings.lootDestinationContainer = SDL_static_cast(Uint8, readNumber(config, "LootDestination", settings.lootDestinationContainer, GAME_MAX_CONTAINERS - 1));
-		settings.playerAlertEnabled = readBool(config, "PlayerAlertEnabled", settings.playerAlertEnabled);
-		settings.pauseOnPlayer = readBool(config, "PauseOnPlayer", settings.pauseOnPlayer);
-		settings.ignoredPlayers = readText(config, "IgnoredPlayers", settings.ignoredPlayers);
-		settings.burstArrowEnabled = readBool(config, "BurstArrowEnabled", settings.burstArrowEnabled);
+		loaded = legacyConfig.openToRead((g_prefPath + "cavebot.cfg").c_str());
+		config = &legacyConfig;
+	}
+	if(loaded)
+	{
+		settings.enabled = readBool(*config, "Enabled", settings.enabled);
+		settings.caveEnabled = readBool(*config, "CaveEnabled", settings.caveEnabled);
+		settings.recordEnabled = readBool(*config, "RecordEnabled", settings.recordEnabled);
+		settings.loop = readBool(*config, "Loop", settings.loop);
+		settings.pauseWhileTarget = readBool(*config, "PauseWhileTarget", settings.pauseWhileTarget);
+		settings.reachDistance = SDL_static_cast(Uint8, readNumber(*config, "ReachDistance", settings.reachDistance, 5));
+		settings.retryDelay = readNumber(*config, "RetryDelay", settings.retryDelay, 10000);
+		settings.targetEnabled = readBool(*config, "TargetEnabled", settings.targetEnabled);
+		settings.targetNames = readText(*config, "TargetNames", settings.targetNames);
+		settings.attackRuneId = SDL_static_cast(Uint16, readNumber(*config, "AttackRuneId", settings.attackRuneId, 65535));
+		settings.attackRuneSubtype = SDL_static_cast(Uint8, readNumber(*config, "AttackRuneSubtype", settings.attackRuneSubtype, 255));
+		settings.attackDelay = readNumber(*config, "AttackDelay", settings.attackDelay, 10000);
+		settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, readNumber(*config, "TargetMovement", settings.targetMovement, CAVEBOT_TARGET_DIAGONAL_DISTANCE_2));
+		settings.lootEnabled = readBool(*config, "LootEnabled", settings.lootEnabled);
+		settings.lootGold = readBool(*config, "LootGold", settings.lootGold);
+		settings.lootAfterKill = readBool(*config, "LootAfterKill", settings.lootAfterKill);
+		settings.dropLootNoCapacity = readBool(*config, "DropLootNoCapacity", settings.dropLootNoCapacity);
+		settings.lootItemIds = readText(*config, "LootItemIds", settings.lootItemIds);
+		settings.lootDestinationContainer = SDL_static_cast(Uint8, readNumber(*config, "LootDestination", settings.lootDestinationContainer, GAME_MAX_CONTAINERS - 1));
+		settings.playerAlertEnabled = readBool(*config, "PlayerAlertEnabled", settings.playerAlertEnabled);
+		settings.pauseOnPlayer = readBool(*config, "PauseOnPlayer", settings.pauseOnPlayer);
+		settings.ignoredPlayers = readText(*config, "IgnoredPlayers", settings.ignoredPlayers);
+		settings.burstArrowEnabled = readBool(*config, "BurstArrowEnabled", settings.burstArrowEnabled);
 
-		StringVector savedWaypoints = config.fetchKeys("Waypoint");
+		StringVector savedWaypoints = config->fetchKeys("Waypoint");
 		for(const std::string& encoded : savedWaypoints)
 		{
 			std::vector<std::string> fields = split(encoded, ',', 8);
@@ -174,7 +216,7 @@ void CaveBot::loadConfig()
 
 		// Kept in a separate key so old waypoint files (whose final text field may
 		// contain commas) remain fully compatible.
-		StringVector savedTargetItems = config.fetchKeys("WaypointTargetItem");
+		StringVector savedTargetItems = config->fetchKeys("WaypointTargetItem");
 		for(const std::string& encoded : savedTargetItems)
 		{
 			std::vector<std::string> fields = split(encoded, ',', 2);
@@ -186,15 +228,19 @@ void CaveBot::loadConfig()
 		}
 	}
 
+	m_profileCharacter = characterName;
 	m_waypoints.swap(waypoints);
+	m_currentWaypoint = 0;
 	m_configLoaded = true;
 	applySettings(settings);
+	if(!characterName.empty() && !loadedProfile)
+		saveConfig();
 }
 
 void CaveBot::saveConfig()
 {
 	Config config;
-	if(!config.openToSave((g_prefPath + "cavebot.cfg").c_str()))
+	if(!config.openToSave(caveBotConfigPath(m_profileCharacter).c_str()))
 		return;
 
 	config.insertKey("Enabled", boolText(m_settings.enabled));
@@ -1367,6 +1413,7 @@ void CaveBot::updateBurstArrows(Uint32 now)
 
 void CaveBot::tick()
 {
+	ensureCharacterProfile();
 	if(!m_configLoaded || !g_engine.isIngame() || g_game.getPlayerID() == 0)
 	{
 		m_playerDetected = false;
@@ -1391,4 +1438,14 @@ void CaveBot::tick()
 	updateBurstArrows(now);
 	updateLooter(now);
 	updateWalker(now);
+}
+
+void CaveBot::ensureCharacterProfile()
+{
+	if(!g_engine.isIngame() || g_game.getPlayerID() == 0)
+		return;
+	Creature* local = g_map.getLocalCreature();
+	if(!local || local->getName().empty() || local->getName() == m_profileCharacter)
+		return;
+	loadCharacterConfig(local->getName());
 }

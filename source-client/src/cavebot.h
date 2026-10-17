@@ -111,6 +111,8 @@ class CaveBot
 		std::string waypointDescription(size_t index) const;
 
 	private:
+		void ensureCharacterProfile();
+		void loadCharacterConfig(const std::string& characterName);
 		bool matchesNameList(const std::string& name, const std::string& list, bool wildcard) const;
 		void updatePlayerAlert(Uint32 now);
 		void updateRecorder(Uint32 now);
@@ -176,6 +178,7 @@ class CaveBot
 		Position m_lastRecordPosition;
 		Uint32 m_nextRecordSave = 0;
 		bool m_configLoaded = false;
+		std::string m_profileCharacter;
 };
 
 extern CaveBot g_caveBot;

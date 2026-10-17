@@ -1022,6 +1022,19 @@ bool UTIL_haveVipPlayer(const std::string& name)
 	return (g_vips.find(name) != g_vips.end());
 }
 
+bool UTIL_isVipPlayerFriend(const std::string& name)
+{
+	// In Tibia.pic the heart is VIP icon 1. Only entries explicitly marked
+	// with this icon are trusted by Auto Rune; other VIP entries can therefore
+	// be used to mark hunted/enemy players.
+	for(const VipPlayers& vipPlayer : g_vipPlayers)
+	{
+		if(SDL_strcasecmp(vipPlayer.playerName.c_str(), name.c_str()) == 0)
+			return (vipPlayer.iconId == 1);
+	}
+	return false;
+}
+
 GUI_VipChecker::GUI_VipChecker(iRect boxRect, Uint32 internalID)
 {
 	setRect(boxRect);
