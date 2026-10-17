@@ -30,7 +30,9 @@ enum CaveBotTargetMovement : Uint8
 	CAVEBOT_TARGET_STAND_DIAGONAL,
 	CAVEBOT_TARGET_DIAGONAL_DISTANCE_3,
 	CAVEBOT_TARGET_DIAGONAL_DISTANCE_4,
-	CAVEBOT_TARGET_DIAGONAL_DISTANCE_5
+	CAVEBOT_TARGET_DIAGONAL_DISTANCE_5,
+	// Appended to preserve numeric values already saved in cavebot.cfg.
+	CAVEBOT_TARGET_DIAGONAL_DISTANCE_2
 };
 
 struct CaveBotWaypoint
@@ -140,6 +142,8 @@ class CaveBot
 		Uint32 m_floorTransitionSince = 0;
 		Uint32 m_nextTargetAction = 0;
 		Uint32 m_nextTargetMovement = 0;
+		Uint32 m_recentAttackTarget = 0;
+		Uint32 m_recentAttackAt = 0;
 		Uint32 m_nextLootAction = 0;
 		Uint32 m_nextPlayerAlert = 0;
 		Uint32 m_nextPlayerAlertBeep = 0;
@@ -154,6 +158,7 @@ class CaveBot
 		Uint8 m_lootCorpseContainer = 0xFF;
 		Uint8 m_lootBagContainer = 0xFF;
 		Uint32 m_lootContainerRequest = 0;
+		Uint8 m_lootOpenAttempts = 0;
 		bool m_lootCorpseBagScanned = false;
 		bool m_targetMovementWalking = false;
 		bool m_targetChaseOverride = false;

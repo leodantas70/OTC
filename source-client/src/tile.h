@@ -58,6 +58,7 @@ class Tile
 		Creature* getTopCreature();
 		Thing* getTopLookThing();
 		Thing* getTopUseThing();
+		Thing* getTopContainerThing();
 		Thing* getTopMoveThing();
 
 		bool addThing(Thing* thing, bool insertThing = false, bool moveCreature = false);

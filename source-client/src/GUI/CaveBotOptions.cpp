@@ -97,6 +97,26 @@ namespace
 	Sint32 g_lootCatalogSelection = 0;
 	bool g_lootCatalogLoaded = false;
 	std::string lowerText(std::string text);
+	const CaveBotTargetMovement g_targetMovementModes[] = {
+		CAVEBOT_TARGET_STAND,
+		CAVEBOT_TARGET_FOLLOW,
+		CAVEBOT_TARGET_DIAGONAL,
+		CAVEBOT_TARGET_STAND_DIAGONAL,
+		CAVEBOT_TARGET_DIAGONAL_DISTANCE_2,
+		CAVEBOT_TARGET_DIAGONAL_DISTANCE_3,
+		CAVEBOT_TARGET_DIAGONAL_DISTANCE_4,
+		CAVEBOT_TARGET_DIAGONAL_DISTANCE_5
+	};
+
+	Sint32 targetMovementSelection(CaveBotTargetMovement movement)
+	{
+		for(size_t index = 0; index < sizeof(g_targetMovementModes) / sizeof(g_targetMovementModes[0]); ++index)
+		{
+			if(g_targetMovementModes[index] == movement)
+				return SDL_static_cast(Sint32, index);
+		}
+		return 0;
+	}
 
 	class GUI_CaveBotLootPreview : public GUI_Element
 	{
@@ -402,8 +422,8 @@ namespace
 		if(movementList)
 		{
 			Sint32 selection = movementList->getSelect();
-			if(selection >= CAVEBOT_TARGET_STAND && selection <= CAVEBOT_TARGET_DIAGONAL_DISTANCE_5)
-				settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, selection);
+			if(selection >= 0 && SDL_static_cast(size_t, selection) < sizeof(g_targetMovementModes) / sizeof(g_targetMovementModes[0]))
+				settings.targetMovement = g_targetMovementModes[selection];
 		}
 		settings.lootEnabled = getChecked(window, CAVEBOT_LOOT_ENABLED_EVENTID);
 		settings.lootGold = getChecked(window, CAVEBOT_LOOT_GOLD_EVENTID);
@@ -661,10 +681,11 @@ void UTIL_caveBotOptions()
 	movementList->add("Seguir o alvo");
 	movementList->add("Manter diagonal");
 	movementList->add("Parado + diagonal");
+	movementList->add("Diagonal 2 SQM");
 	movementList->add("Diagonal 3 SQM");
 	movementList->add("Diagonal 4 SQM");
 	movementList->add("Diagonal 5 SQM");
-	movementList->setSelect(SDL_static_cast(Sint32, settings.targetMovement));
+	movementList->setSelect(targetMovementSelection(settings.targetMovement));
 	movementList->startEvents();
 	window->addChild(movementList);
 	window->addChild(new GUI_Label(iRect(285, 443, 0, 0), "Escolha como o personagem se posiciona durante o combate."));

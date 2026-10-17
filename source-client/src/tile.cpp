@@ -370,6 +370,26 @@ Thing* Tile::getTopUseThing()
 	return m_ground;
 }
 
+Thing* Tile::getTopContainerThing()
+{
+	// Corpses can be missing the LyingCorpse flag in custom DAT files. Locate
+	// the first usable container directly instead of relying on that flag.
+	for(Item* item : m_downItems)
+	{
+		if(item && item->getThingType() && item->getThingType()->hasFlag(ThingAttribute_Container))
+			return item;
+	}
+	for(std::vector<Item*>::reverse_iterator it = m_topItems.rbegin(), end = m_topItems.rend(); it != end; ++it)
+	{
+		Item* item = *it;
+		if(item && item->getThingType() && item->getThingType()->hasFlag(ThingAttribute_Container))
+			return item;
+	}
+	if(m_ground && m_ground->getThingType() && m_ground->getThingType()->hasFlag(ThingAttribute_Container))
+		return m_ground;
+	return NULL;
+}
+
 Thing* Tile::getTopMoveThing()
 {
 	for(std::vector<Item*>::iterator it = m_downItems.begin(), end = m_downItems.end(); it != end; ++it)

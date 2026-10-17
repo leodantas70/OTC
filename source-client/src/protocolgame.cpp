@@ -1799,7 +1799,7 @@ void ProtocolGame::parseCreatureHealth(InputMessage& msg)
 	Creature* creature = g_map.getCreatureById(creatureId);
 	if(creature)
 	{
-		if(health == 0 && creature->isMonster() && g_game.getAttackID() == creatureId)
+		if(health == 0 && creature->isMonster())
 			g_caveBot.notifyCreatureDeath(creatureId, creature->getCurrentPosition());
 		creature->setHealth(health);
 

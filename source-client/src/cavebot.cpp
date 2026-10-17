@@ -141,7 +141,7 @@ void CaveBot::loadConfig()
 		settings.attackRuneId = SDL_static_cast(Uint16, readNumber(config, "AttackRuneId", settings.attackRuneId, 65535));
 		settings.attackRuneSubtype = SDL_static_cast(Uint8, readNumber(config, "AttackRuneSubtype", settings.attackRuneSubtype, 255));
 		settings.attackDelay = readNumber(config, "AttackDelay", settings.attackDelay, 10000);
-		settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, readNumber(config, "TargetMovement", settings.targetMovement, CAVEBOT_TARGET_DIAGONAL_DISTANCE_5));
+		settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, readNumber(config, "TargetMovement", settings.targetMovement, CAVEBOT_TARGET_DIAGONAL_DISTANCE_2));
 		settings.lootEnabled = readBool(config, "LootEnabled", settings.lootEnabled);
 		settings.lootGold = readBool(config, "LootGold", settings.lootGold);
 		settings.lootAfterKill = readBool(config, "LootAfterKill", settings.lootAfterKill);
@@ -247,7 +247,7 @@ void CaveBot::applySettings(const CaveBotSettings& settings)
 	m_settings.reachDistance = UTIL_min<Uint8>(5, m_settings.reachDistance);
 	m_settings.retryDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.retryDelay));
 	m_settings.attackDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.attackDelay));
-	if(m_settings.targetMovement > CAVEBOT_TARGET_DIAGONAL_DISTANCE_5)
+	if(m_settings.targetMovement > CAVEBOT_TARGET_DIAGONAL_DISTANCE_2)
 		m_settings.targetMovement = CAVEBOT_TARGET_STAND;
 	resetRuntime();
 	if(currentWaypoint < m_waypoints.size())
@@ -302,6 +302,8 @@ void CaveBot::resetRuntime()
 	m_floorTransitionSince = 0;
 	m_nextTargetAction = 0;
 	m_nextTargetMovement = 0;
+	m_recentAttackTarget = 0;
+	m_recentAttackAt = 0;
 	m_nextLootAction = 0;
 	m_nextPlayerAlert = 0;
 	m_nextPlayerAlertBeep = 0;
@@ -312,6 +314,7 @@ void CaveBot::resetRuntime()
 	m_lootCorpseContainer = 0xFF;
 	m_lootBagContainer = 0xFF;
 	m_lootContainerRequest = 0;
+	m_lootOpenAttempts = 0;
 	m_lootCorpseBagScanned = false;
 	m_lootTargets.clear();
 	m_lastCorpseItemId = 0;
@@ -323,6 +326,11 @@ void CaveBot::notifyCreatureDeath(Uint32 creatureId, const Position& position)
 {
 	if(!m_configLoaded || !m_settings.enabled || !m_settings.lootEnabled)
 		return;
+	Uint32 now = SDL_GetTicks();
+	bool wasOurTarget = (g_game.getAttackID() == creatureId ||
+		(m_recentAttackTarget == creatureId && !SDL_TICKS_PASSED(now, m_recentAttackAt + 15000)));
+	if(!wasOurTarget)
+		return;
 
 	for(const LootTarget& target : m_lootTargets)
 	{
@@ -333,7 +341,7 @@ void CaveBot::notifyCreatureDeath(Uint32 creatureId, const Position& position)
 	LootTarget target;
 	target.creatureId = creatureId;
 	target.position = position;
-	target.queuedAt = SDL_GetTicks();
+	target.queuedAt = now;
 	m_lootTargets.push_back(target);
 }
 
@@ -621,6 +629,11 @@ void CaveBot::updateTargetBot(Uint32 now)
 		if(g_assistant.findItem(m_settings.attackRuneId, m_settings.attackRuneSubtype, runePosition, stackpos))
 			g_game.sendUseOnCreature(runePosition, m_settings.attackRuneId, stackpos, target->getId());
 	}
+	if(target)
+	{
+		m_recentAttackTarget = target->getId();
+		m_recentAttackAt = now;
+	}
 	m_nextTargetAction = now + m_settings.attackDelay;
 }
 
@@ -666,6 +679,7 @@ void CaveBot::updateTargetMovement(Uint32 now)
 
 	bool diagonalMovement = (m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL ||
 		m_settings.targetMovement == CAVEBOT_TARGET_STAND_DIAGONAL ||
+		m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_2 ||
 		m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_3 ||
 		m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_4 ||
 		m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_5);
@@ -685,7 +699,9 @@ void CaveBot::updateTargetMovement(Uint32 now)
 	Sint32 deltaY = Position::getDistanceY(current, targetPosition);
 
 	Sint32 wantedDistance = 1;
-	if(m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_3)
+	if(m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_2)
+		wantedDistance = 2;
+	else if(m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_3)
 		wantedDistance = 3;
 	else if(m_settings.targetMovement == CAVEBOT_TARGET_DIAGONAL_DISTANCE_4)
 		wantedDistance = 4;
@@ -710,9 +726,30 @@ void CaveBot::updateTargetMovement(Uint32 now)
 	}
 
 	static const Sint32 diagonalOffsets[4][2] = {{-1, -1}, {1, -1}, {-1, 1}, {1, 1}};
-	Position bestPosition;
-	Sint32 bestDistance = 0x7FFFFFFF;
-	bool found = false;
+	struct MovementCandidate
+	{
+		Position position;
+		Sint32 score;
+	};
+	Sint32 currentSideX = SDL_static_cast(Sint32, current.x) - SDL_static_cast(Sint32, targetPosition.x);
+	Sint32 currentSideY = SDL_static_cast(Sint32, current.y) - SDL_static_cast(Sint32, targetPosition.y);
+	auto movementScore = [&](const Position& candidate) -> Sint32 {
+		Sint32 candidateSideX = SDL_static_cast(Sint32, candidate.x) - SDL_static_cast(Sint32, targetPosition.x);
+		Sint32 candidateSideY = SDL_static_cast(Sint32, candidate.y) - SDL_static_cast(Sint32, targetPosition.y);
+		Sint32 score = UTIL_max<Sint32>(Position::getDistanceX(current, candidate), Position::getDistanceY(current, candidate));
+		// Crossing either axis through the monster makes the character pass in
+		// front of it. Strongly prefer destinations that remain on the same side.
+		if(currentSideX != 0 && candidateSideX != 0 && ((currentSideX < 0) != (candidateSideX < 0)))
+			score += 10000;
+		if(currentSideY != 0 && candidateSideY != 0 && ((currentSideY < 0) != (candidateSideY < 0)))
+			score += 10000;
+		if(currentSideX * candidateSideX + currentSideY * candidateSideY < 0)
+			score += 20000;
+		if((currentSideX != 0 && candidateSideX == 0) || (currentSideY != 0 && candidateSideY == 0))
+			score += 500;
+		return score;
+	};
+	std::vector<MovementCandidate> candidates;
 	for(size_t i = 0; i < 4; ++i)
 	{
 		Sint32 candidateX = SDL_static_cast(Sint32, targetPosition.x) + diagonalOffsets[i][0] * wantedDistance;
@@ -723,58 +760,67 @@ void CaveBot::updateTargetMovement(Uint32 now)
 		Tile* tile = g_map.getTile(candidate);
 		if(!tile || !tile->isWalkable() || tile->hasFloorChangeRisk() || tile->getTopCreature())
 			continue;
-		Sint32 distance = UTIL_max<Sint32>(Position::getDistanceX(current, candidate), Position::getDistanceY(current, candidate));
-		if(distance < bestDistance)
+		MovementCandidate movementCandidate;
+		movementCandidate.position = candidate;
+		movementCandidate.score = movementScore(candidate);
+		candidates.push_back(movementCandidate);
+	}
+	std::sort(candidates.begin(), candidates.end(), [](const MovementCandidate& left, const MovementCandidate& right) {
+		return left.score < right.score;
+	});
+	for(const MovementCandidate& candidate : candidates)
+	{
+		if(g_game.startAutoWalk(candidate.position, true, false))
 		{
-			bestDistance = distance;
-			bestPosition = candidate;
-			found = true;
+			m_targetMovementWalking = true;
+			m_nextTargetMovement = now + 300;
+			return;
 		}
 	}
 
-	// Se as quatro diagonais exatas estiverem bloqueadas por paredes, buracos ou
-	// criaturas, procure um SQM seguro imediatamente ao redor delas. Isso evita
-	// repetir para sempre um destino impossivel durante o combate.
-	if(!found)
+	// Sem diagonal alcancavel, nao procure outro canto. Apenas preserve a
+	// distancia escolhida em qualquer direcao ao redor do alvo.
+	if(UTIL_max<Sint32>(deltaX, deltaY) == wantedDistance)
 	{
-		Sint32 bestFallbackScore = 0x7FFFFFFF;
-		for(size_t i = 0; i < 4; ++i)
-		{
-			Sint32 cornerX = SDL_static_cast(Sint32, targetPosition.x) + diagonalOffsets[i][0] * wantedDistance;
-			Sint32 cornerY = SDL_static_cast(Sint32, targetPosition.y) + diagonalOffsets[i][1] * wantedDistance;
-			for(Sint32 offsetX = -1; offsetX <= 1; ++offsetX)
-			{
-				for(Sint32 offsetY = -1; offsetY <= 1; ++offsetY)
-				{
-					Sint32 candidateX = cornerX + offsetX;
-					Sint32 candidateY = cornerY + offsetY;
-					if(candidateX < 0 || candidateX > 65535 || candidateY < 0 || candidateY > 65535)
-						continue;
-					Position candidate(SDL_static_cast(Uint16, candidateX), SDL_static_cast(Uint16, candidateY), targetPosition.z);
-					Sint32 targetDeltaX = Position::getDistanceX(candidate, targetPosition);
-					Sint32 targetDeltaY = Position::getDistanceY(candidate, targetPosition);
-					if(targetDeltaX == 0 || targetDeltaY == 0)
-						continue;
-					Tile* tile = g_map.getTile(candidate);
-					if(!tile || !tile->isWalkable() || tile->hasFloorChangeRisk() || tile->getTopCreature())
-						continue;
-					Sint32 distancePenalty = std::abs(targetDeltaX - wantedDistance) + std::abs(targetDeltaY - wantedDistance);
-					Sint32 walkDistance = UTIL_max<Sint32>(Position::getDistanceX(current, candidate), Position::getDistanceY(current, candidate));
-					Sint32 score = distancePenalty * 100 + walkDistance;
-					if(score < bestFallbackScore)
-					{
-						bestFallbackScore = score;
-						bestPosition = candidate;
-						found = true;
-					}
-				}
-			}
-		}
+		if(m_targetMovementWalking)
+			g_game.stopAutoWalk();
+		m_targetMovementWalking = false;
+		m_nextTargetMovement = now + 150;
+		return;
 	}
 
-	if(found)
+	candidates.clear();
+	for(Sint32 offsetX = -wantedDistance; offsetX <= wantedDistance; ++offsetX)
 	{
-		m_targetMovementWalking = g_game.startAutoWalk(bestPosition, true, false);
+		for(Sint32 offsetY = -wantedDistance; offsetY <= wantedDistance; ++offsetY)
+		{
+			if(UTIL_max<Sint32>(std::abs(offsetX), std::abs(offsetY)) != wantedDistance)
+				continue;
+			Sint32 candidateX = SDL_static_cast(Sint32, targetPosition.x) + offsetX;
+			Sint32 candidateY = SDL_static_cast(Sint32, targetPosition.y) + offsetY;
+			if(candidateX < 0 || candidateX > 65535 || candidateY < 0 || candidateY > 65535)
+				continue;
+			Position candidate(SDL_static_cast(Uint16, candidateX), SDL_static_cast(Uint16, candidateY), targetPosition.z);
+			Tile* tile = g_map.getTile(candidate);
+			if(!tile || !tile->isWalkable() || tile->hasFloorChangeRisk() || tile->getTopCreature())
+				continue;
+			MovementCandidate movementCandidate;
+			movementCandidate.position = candidate;
+			movementCandidate.score = movementScore(candidate);
+			candidates.push_back(movementCandidate);
+		}
+	}
+	std::sort(candidates.begin(), candidates.end(), [](const MovementCandidate& left, const MovementCandidate& right) {
+		return left.score < right.score;
+	});
+	m_targetMovementWalking = false;
+	for(const MovementCandidate& candidate : candidates)
+	{
+		if(g_game.startAutoWalk(candidate.position, true, false))
+		{
+			m_targetMovementWalking = true;
+			break;
+		}
 	}
 	m_nextTargetMovement = now + 300;
 }
@@ -904,6 +950,7 @@ void CaveBot::finishLootTarget(Uint32 now)
 	m_lootCorpseContainer = 0xFF;
 	m_lootBagContainer = 0xFF;
 	m_lootContainerRequest = 0;
+	m_lootOpenAttempts = 0;
 	m_lootCorpseBagScanned = false;
 	m_lastCorpseItemId = 0;
 	m_lastCorpseStack = 0;
@@ -931,8 +978,16 @@ void CaveBot::updateLooter(Uint32 now)
 		Container* corpse = g_game.findContainer(m_lootCorpseContainer);
 		if(!corpse)
 		{
-			if(now < m_lootContainerRequest + 2000)
+			if(now < m_lootContainerRequest + 1200)
 				return;
+			if(m_lootOpenAttempts < 3 && m_lastCorpseItemId != 0)
+			{
+				g_game.sendUseItem(m_lastCorpsePosition, m_lastCorpseItemId, m_lastCorpseStack, m_lootCorpseContainer);
+				++m_lootOpenAttempts;
+				m_lootContainerRequest = now;
+				m_nextLootAction = now + 350;
+				return;
+			}
 
 			finishLootTarget(now);
 			return;
@@ -1029,10 +1084,39 @@ void CaveBot::updateLooter(Uint32 now)
 	{
 		if(m_settings.caveEnabled && now >= m_lastWalkRequest + 350)
 		{
-			if(!g_game.startAutoWalk(target.position, true, false))
+			struct LootApproach
 			{
-				finishLootTarget(now);
-				return;
+				Position position;
+				Sint32 distance;
+			};
+			std::vector<LootApproach> approaches;
+			for(Sint32 offsetX = -1; offsetX <= 1; ++offsetX)
+			{
+				for(Sint32 offsetY = -1; offsetY <= 1; ++offsetY)
+				{
+					if(offsetX == 0 && offsetY == 0)
+						continue;
+					Sint32 approachX = SDL_static_cast(Sint32, target.position.x) + offsetX;
+					Sint32 approachY = SDL_static_cast(Sint32, target.position.y) + offsetY;
+					if(approachX < 0 || approachX > 65535 || approachY < 0 || approachY > 65535)
+						continue;
+					Position approachPosition(SDL_static_cast(Uint16, approachX), SDL_static_cast(Uint16, approachY), target.position.z);
+					Tile* approachTile = g_map.getTile(approachPosition);
+					if(!approachTile || !approachTile->isWalkable() || approachTile->hasFloorChangeRisk() || approachTile->getTopCreature())
+						continue;
+					LootApproach approach;
+					approach.position = approachPosition;
+					approach.distance = UTIL_max<Sint32>(Position::getDistanceX(center, approachPosition), Position::getDistanceY(center, approachPosition));
+					approaches.push_back(approach);
+				}
+			}
+			std::sort(approaches.begin(), approaches.end(), [](const LootApproach& left, const LootApproach& right) {
+				return left.distance < right.distance;
+			});
+			for(const LootApproach& approach : approaches)
+			{
+				if(g_game.startAutoWalk(approach.position, true, false))
+					break;
 			}
 			m_lastWalkRequest = now;
 		}
@@ -1044,7 +1128,7 @@ void CaveBot::updateLooter(Uint32 now)
 		g_game.stopAutoWalk();
 
 	Tile* tile = g_map.getTile(target.position);
-	Thing* thing = (tile && tile->isCreatureLying() ? tile->getTopUseThing() : NULL);
+	Thing* thing = (tile ? tile->getTopContainerThing() : NULL);
 	Item* item = (thing ? thing->getItem() : NULL);
 	if(!item)
 	{
@@ -1071,6 +1155,7 @@ void CaveBot::updateLooter(Uint32 now)
 	m_lastCorpseStack = stackpos;
 	m_lootCorpseContainer = containerId;
 	m_lootContainerRequest = now;
+	m_lootOpenAttempts = 1;
 	m_lootCorpseBagScanned = false;
 	m_nextLootAction = now + 350;
 }
@@ -1288,6 +1373,12 @@ void CaveBot::tick()
 		return;
 	}
 	Uint32 now = SDL_GetTicks();
+	Creature* attacked = g_map.getCreatureById(g_game.getAttackID());
+	if(attacked && attacked->isMonster() && attacked->getHealth() > 0)
+	{
+		m_recentAttackTarget = attacked->getId();
+		m_recentAttackAt = now;
+	}
 	updateRecorder(now);
 	if(!m_settings.enabled)
 	{
