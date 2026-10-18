@@ -110,6 +110,31 @@ namespace
 		std::string key = profileKey(characterName);
 		return (key.empty() ? g_prefPath + "assistant.cfg" : g_prefPath + "assistant-" + key + ".cfg");
 	}
+
+	bool nameInCommaList(const std::string& name, const std::string& names)
+	{
+		size_t start = 0;
+		while(start <= names.size())
+		{
+			size_t separator = names.find(',', start);
+			size_t length = (separator == std::string::npos ? names.size() - start : separator - start);
+			size_t first = names.find_first_not_of(" \t\r\n", start);
+			if(first != std::string::npos && first < start + length)
+			{
+				size_t last = names.find_last_not_of(" \t\r\n", start + length - 1);
+				if(last != std::string::npos)
+				{
+					std::string entry = names.substr(first, last - first + 1);
+					if(SDL_strcasecmp(entry.c_str(), name.c_str()) == 0)
+						return true;
+				}
+			}
+			if(separator == std::string::npos)
+				break;
+			start = separator + 1;
+		}
+		return false;
+	}
 }
 
 void Assistant::loadConfig()
@@ -169,6 +194,7 @@ void Assistant::loadCharacterConfig(const std::string& characterName)
 		settings.runeLogoutNoBlank = readBool(*config, "RuneLogoutNoBlank", settings.runeLogoutNoBlank);
 		settings.blankRuneId = SDL_static_cast(Uint16, readNumber(*config, "BlankRuneId", settings.blankRuneId, 65535));
 		settings.runeLogoutNonVip = readBool(*config, "RuneLogoutNonVip", settings.runeLogoutNonVip);
+		settings.runeTrustedPlayers = readText(*config, "RuneTrustedPlayers", settings.runeTrustedPlayers);
 	}
 
 	m_profileCharacter = characterName;
@@ -221,6 +247,7 @@ void Assistant::saveConfig()
 	config.insertKey("RuneLogoutNoBlank", boolText(m_settings.runeLogoutNoBlank));
 	config.insertKey("BlankRuneId", numberText(m_settings.blankRuneId));
 	config.insertKey("RuneLogoutNonVip", boolText(m_settings.runeLogoutNonVip));
+	config.insertKey("RuneTrustedPlayers", m_settings.runeTrustedPlayers);
 }
 
 void Assistant::applySettings(const AssistantSettings& settings)
@@ -441,7 +468,8 @@ bool Assistant::hasPlayerWithoutFriendHeartOnScreen() const
 			continue;
 		if(creature->getCurrentPosition().z != localPosition.z)
 			continue;
-		if(!UTIL_isVipPlayerFriend(creature->getName()))
+		if(!UTIL_isVipPlayerFriend(creature->getName()) &&
+			!nameInCommaList(creature->getName(), m_settings.runeTrustedPlayers))
 			return true;
 	}
 	return false;

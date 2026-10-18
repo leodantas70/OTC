@@ -45,7 +45,7 @@
 #define ASSISTANT_AMMUNITION_ID_EVENTID 1217
 
 #define AUTORUNE_OPTIONS_WIDTH 400
-#define AUTORUNE_OPTIONS_HEIGHT 350
+#define AUTORUNE_OPTIONS_HEIGHT 400
 #define AUTORUNE_CANCEL_EVENTID 1500
 #define AUTORUNE_OK_EVENTID 1501
 #define AUTORUNE_ENABLED_EVENTID 1502
@@ -58,6 +58,7 @@
 #define AUTORUNE_LOGOUT_BLANK_EVENTID 1509
 #define AUTORUNE_BLANK_ID_EVENTID 1510
 #define AUTORUNE_LOGOUT_NONVIP_EVENTID 1511
+#define AUTORUNE_TRUSTED_PLAYERS_EVENTID 1512
 
 extern Engine g_engine;
 
@@ -275,6 +276,7 @@ void autoRuneOptions_Events(Uint32 event, Sint32)
 	settings.runeLogoutNoBlank = getChecked(window, AUTORUNE_LOGOUT_BLANK_EVENTID);
 	settings.blankRuneId = SDL_static_cast(Uint16, getNumber(window, AUTORUNE_BLANK_ID_EVENTID, 65535));
 	settings.runeLogoutNonVip = getChecked(window, AUTORUNE_LOGOUT_NONVIP_EVENTID);
+	settings.runeTrustedPlayers = getText(window, AUTORUNE_TRUSTED_PLAYERS_EVENTID);
 	g_assistant.applySettings(settings);
 	g_assistant.saveConfig();
 	g_engine.removeWindow(window);
@@ -312,7 +314,10 @@ void UTIL_autoRuneOptions()
 	addLabel(window, 260, 217, "ID:");
 	addTextBox(window, 282, 213, 65, numberText(settings.blankRuneId), AUTORUNE_BLANK_ID_EVENTID, 5, true);
 	addCheckBox(window, 18, 242, 300, "Logout ao aparecer jogador sem <3 na VIP", settings.runeLogoutNonVip, AUTORUNE_LOGOUT_NONVIP_EVENTID);
-	window->addChild(new GUI_Label(iRect(26, 271, 0, 0), "A protecao contra jogador inicia 8 segundos apos o login."));
+	addLabel(window, 26, 275, "Nomes permitidos fora da VIP:");
+	addTextBox(window, 26, 291, 349, settings.runeTrustedPlayers, AUTORUNE_TRUSTED_PLAYERS_EVENTID, 250);
+	window->addChild(new GUI_Label(iRect(26, 315, 0, 0), "Separe os nomes por virgula. Ex.: Gamemaster, Tutor"));
+	window->addChild(new GUI_Label(iRect(26, 338, 0, 0), "A protecao contra jogador inicia 8 segundos apos o login."));
 
 	window->addChild(new GUI_Separator(iRect(13, AUTORUNE_OPTIONS_HEIGHT - 40, AUTORUNE_OPTIONS_WIDTH - 26, 2)));
 	GUI_Button* button = new GUI_Button(iRect(AUTORUNE_OPTIONS_WIDTH - 109, AUTORUNE_OPTIONS_HEIGHT - 30, GUI_UI_BUTTON_43PX_GREEN_UP_W, GUI_UI_BUTTON_43PX_GREEN_UP_H), "Salvar", CLIENT_GUI_ENTER_TRIGGER);

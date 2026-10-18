@@ -50,6 +50,7 @@ struct AssistantSettings
 	bool runeLogoutNoBlank = false;
 	Uint16 blankRuneId = 3147;
 	bool runeLogoutNonVip = false;
+	std::string runeTrustedPlayers;
 };
 
 class Assistant
