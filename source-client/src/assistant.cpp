@@ -35,17 +35,51 @@ namespace
 	const Uint32 ASSISTANT_EQUIPMENT_CONFIRM_DELAY = 120;
 	const Uint32 ASSISTANT_EQUIPMENT_EMPTY_CONFIRM_DELAY = 40;
 
-	bool isEnergyRingId(Uint16 itemId, Uint16 configuredId)
+	bool isConfiguredRingId(Uint16 itemId, Uint16 configuredId)
 	{
 		if(itemId == 0 || configuredId == 0)
 			return false;
 		if(itemId == configuredId)
 			return true;
 
-		// The 7.x assets used by this client expose the modern client ids. Keep
-		// the classic OT ids as a fallback for compatible custom data packs.
-		return ((configuredId == 3051 && itemId == 3088) ||
-			(configuredId == 2167 && itemId == 2204));
+		struct RingTransform
+		{
+			Uint16 baseId;
+			Uint16 activeId;
+		};
+
+		// Every transforming ring from the supported 7.x item set. Both the
+		// classic server ids and the modern client ids used by this data pack are
+		// listed because the offset is not the same for every ring family.
+		static const RingTransform transforms[] = {
+			{2165, 2202}, // stealth ring
+			{2166, 2203}, // power ring
+			{2167, 2204}, // energy ring
+			{2168, 2205}, // life ring
+			{2169, 2206}, // time ring
+			{2207, 2210}, // sword ring
+			{2208, 2211}, // axe ring
+			{2209, 2212}, // club ring
+			{2213, 2215}, // dwarven ring
+			{2214, 2216}, // ring of healing
+			{3049, 3086}, // stealth ring (modern client id)
+			{3050, 3087}, // power ring
+			{3051, 3088}, // energy ring
+			{3052, 3089}, // life ring
+			{3053, 3090}, // time ring
+			{3091, 3094}, // sword ring
+			{3092, 3095}, // axe ring
+			{3093, 3096}, // club ring
+			{3097, 3099}, // dwarven ring
+			{3098, 3100}  // ring of healing
+		};
+
+		for(const RingTransform& transform : transforms)
+		{
+			if(transform.baseId == configuredId && transform.activeId == itemId)
+				return true;
+		}
+		return false;
 	}
 
 	bool readBool(Config& config, const char* key, bool fallback)
@@ -591,7 +625,7 @@ bool Assistant::shouldBlockTargetRune() const
 	{
 		ItemUI* equippedRing = g_game.getInventoryItem(SLOT_RING);
 		Uint16 equippedRingId = (equippedRing ? equippedRing->getID() : 0);
-		bool emergencyRingEquipped = isEnergyRingId(equippedRingId, m_settings.energyRingId) ||
+		bool emergencyRingEquipped = isConfiguredRingId(equippedRingId, m_settings.energyRingId) ||
 			(m_energyRingActive && equippedRing && m_energyRingEquippedId != 0 && equippedRingId == m_energyRingEquippedId);
 		if(!emergencyRingEquipped)
 			return true;
@@ -642,7 +676,7 @@ void Assistant::tick()
 		// The untransformed id is enough to recognize a ring that was already in
 		// the slot. After an equip request, remember the id sent back by the
 		// server because an active Energy Ring commonly has a different id.
-		if(isEnergyRingId(equippedRingId, m_settings.energyRingId))
+		if(isConfiguredRingId(equippedRingId, m_settings.energyRingId))
 		{
 			m_energyRingActive = true;
 			m_energyRingEquippedId = equippedRingId;
@@ -686,7 +720,7 @@ void Assistant::tick()
 		// player may manually change the ring. Re-arm the emergency logic as soon
 		// as the slot no longer contains the ring that this assistant equipped.
 		if(m_energyRingActive && equippedRing && m_energyRingEquippedId != 0 &&
-			equippedRingId != m_energyRingEquippedId && !isEnergyRingId(equippedRingId, m_settings.energyRingId))
+			equippedRingId != m_energyRingEquippedId && !isConfiguredRingId(equippedRingId, m_settings.energyRingId))
 		{
 			m_energyRingActive = false;
 			m_energyRingEquippedId = 0;
@@ -777,7 +811,7 @@ void Assistant::tick()
 			// not depend on the previous Energy Ring latch.
 			if(!m_energyRingActive && !m_energyRingUnequipPending &&
 				m_settings.preferredRingId != 0 &&
-				!isEquipped(SLOT_RING, m_settings.preferredRingId) &&
+				!isConfiguredRingId(equippedRingId, m_settings.preferredRingId) &&
 				SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
 			{
 				Position preferredPosition;
