@@ -109,6 +109,132 @@ static iRect chatToggleButtonRect(const iRect& rect)
 #define CHANNEL_MESSAGE_ADVERTISING "Here you can advertise all kinds of things. Among others, you can trade Tibia items, advertise ingame events, seek characters for a quest or a hunting group, find members for your guild or look for somebody to help you with something.\nIt goes without saying that all advertisements must be conform to the Tibia Rules.Keep in mind that it is illegal to advertise trades including premium time, real money or Tibia characters."
 #define CHANNEL_MESSAGE_CLOSED "The channel has been closed. You need to re-join the channel if you get invited."
 
+namespace
+{
+	struct LootPriceEntry
+	{
+		std::string name;
+		Uint32 price = 0;
+	};
+
+	std::vector<LootPriceEntry> g_lootPriceEntries;
+	bool g_lootPricesLoaded = false;
+
+	std::string lowerLootText(std::string text)
+	{
+		std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c) {
+			return SDL_static_cast(char, std::tolower(c));
+		});
+		return text;
+	}
+
+	void loadLootPrices()
+	{
+		if(g_lootPricesLoaded)
+			return;
+		g_lootPricesLoaded = true;
+
+		std::string path = g_basePath + ASSETS_CATALOG + PATH_PLATFORM_SLASH + "itemprices.ofip";
+		SDL_RWops* file = SDL_RWFromFile(path.c_str(), "rb");
+		if(!file)
+			return;
+
+		char magic[4];
+		Uint8 version = 0;
+		if(SDL_RWread(file, magic, 1, sizeof(magic)) != sizeof(magic) ||
+			SDL_memcmp(magic, "OFIP", sizeof(magic)) != 0 ||
+			SDL_RWread(file, &version, 1, 1) != 1 || version != 1)
+		{
+			SDL_RWclose(file);
+			return;
+		}
+
+		Uint32 count = UTIL_min<Uint32>(SDL_ReadLE32(file), 65535);
+		g_lootPriceEntries.reserve(count);
+		for(Uint32 index = 0; index < count; ++index)
+		{
+			SDL_ReadLE16(file);
+			Uint32 price = SDL_ReadLE32(file);
+			Uint8 nameLength = 0;
+			if(SDL_RWread(file, &nameLength, 1, 1) != 1)
+				break;
+			std::string name(nameLength, '\0');
+			if(nameLength != 0 && SDL_RWread(file, &name[0], 1, nameLength) != nameLength)
+				break;
+			if(!name.empty())
+				g_lootPriceEntries.push_back({lowerLootText(name), price});
+		}
+		SDL_RWclose(file);
+	}
+
+	Uint32 lootMessageValue(const std::string& text)
+	{
+		loadLootPrices();
+		const std::string lowered = lowerLootText(text);
+		Uint32 greatestValue = 0;
+		for(const LootPriceEntry& entry : g_lootPriceEntries)
+		{
+			size_t position = lowered.find(entry.name);
+			if(position == std::string::npos)
+				continue;
+
+			Uint32 amount = 1;
+			size_t cursor = position;
+			while(cursor > 0 && std::isspace(SDL_static_cast(unsigned char, lowered[cursor - 1])))
+				--cursor;
+			size_t numberEnd = cursor;
+			while(cursor > 0 && std::isdigit(SDL_static_cast(unsigned char, lowered[cursor - 1])))
+				--cursor;
+			if(numberEnd > cursor)
+			{
+				Uint64 parsedAmount = std::strtoul(lowered.substr(cursor, numberEnd - cursor).c_str(), NULL, 10);
+				amount = SDL_static_cast(Uint32, UTIL_min<Uint64>(parsedAmount, 65535));
+			}
+
+			Uint64 value = SDL_static_cast(Uint64, entry.price) * amount;
+			greatestValue = UTIL_max<Uint32>(greatestValue,
+				SDL_static_cast(Uint32, UTIL_min<Uint64>(value, SDL_MAX_UINT32)));
+		}
+		return greatestValue;
+	}
+
+	void lootMessageColor(Uint32 value, Uint8& red, Uint8& green, Uint8& blue)
+	{
+		if(value >= 10000000)
+		{
+			red = 255; green = 0; blue = 0;
+		}
+		else if(value >= 5000000)
+		{
+			red = 255; green = 165; blue = 0;
+		}
+		else if(value >= 1000000)
+		{
+			red = 255; green = 255; blue = 0;
+		}
+		else if(value >= 100000)
+		{
+			red = 242; green = 90; blue = 237;
+		}
+		else if(value >= 10000)
+		{
+			red = 95; green = 141; blue = 247;
+		}
+		else if(value >= 1000)
+		{
+			red = 0; green = 255; blue = 0;
+		}
+		else if(value >= 50)
+		{
+			red = 255; green = 255; blue = 255;
+		}
+		else
+		{
+			red = 170; green = 170; blue = 170;
+		}
+	}
+}
+
 Channel::Channel(std::string channelName, Uint32 channelId, bool closable, bool privateChannel) :
 	channelName(std::move(channelName)), channelId(channelId), channelClosable(closable), privateChannel(privateChannel)
 {
@@ -448,6 +574,7 @@ void Chat::gameStart()
 		openChannel(CHANNEL_ID_DEFAULT, CHANNEL_NAME_DEFAULT_LEGACY, false, false);
 
 	openChannel(CHANNEL_ID_SERVERLOG, CHANNEL_NAME_SERVERLOG, false, false);
+	openChannel(CHANNEL_ID_LOOT, CHANNEL_NAME_LOOT, false, false);
 
 	m_savedMessages.clear();
 	m_textbox->setText("");
@@ -752,6 +879,24 @@ void Chat::addChannelMessage(Uint32 channelId, MessageMode mode, Uint32 statemen
 			return;
 		}
 	}
+}
+
+void Chat::addLootMessage(const std::string& text, time_t timestamp)
+{
+	Channel* channel = getChannel(CHANNEL_ID_LOOT);
+	if(!channel)
+	{
+		openChannel(CHANNEL_ID_LOOT, CHANNEL_NAME_LOOT, false, false);
+		channel = getChannel(CHANNEL_ID_LOOT);
+	}
+	if(!channel)
+		return;
+
+	Uint8 red, green, blue;
+	lootMessageColor(lootMessageValue(text), red, green, blue);
+	channel->channelConsole->addMessage(0, timestamp, "", 0, text, red, green, blue, 0);
+	channel->highlightTime = g_frameTime + 1000;
+	channel->unreadMessage = true;
 }
 
 void Chat::sendMessage()

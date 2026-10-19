@@ -708,4 +708,15 @@
       <Filter>Header Files\GUI</Filter>
     </ClInclude>
   </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="resources\app.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+    <Image Include="resources\tibia-assistant-18.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="resources\tibia-assistant-18.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+  </ItemGroup>
 </Project>

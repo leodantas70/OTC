@@ -7087,7 +7087,9 @@ void ProtocolGame::sendAttackModes(Uint8 attackMode, Uint8 chaseMode, Uint8 secu
 	msg.addU8(GameAttackModesOpcode);
 	msg.addU8(attackMode);
 	msg.addU8(chaseMode);
-	msg.addU8(secureMode);
+	// Safe fight on the wire is 1 = enabled and 0 = disabled. The local
+	// SecureMode enum deliberately uses the opposite numeric order.
+	msg.addU8(secureMode == SECUREMODE_SECURE ? 1 : 0);
 	if(g_game.hasGameFeature(GAME_FEATURE_PVP_MODE))
 		msg.addU8(pvpMode);
 	onSend(msg);

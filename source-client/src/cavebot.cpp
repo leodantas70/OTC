@@ -188,6 +188,9 @@ void CaveBot::loadCharacterConfig(const std::string& characterName)
 		settings.lootGold = readBool(*config, "LootGold", settings.lootGold);
 		settings.lootAfterKill = readBool(*config, "LootAfterKill", settings.lootAfterKill);
 		settings.dropLootNoCapacity = readBool(*config, "DropLootNoCapacity", settings.dropLootNoCapacity);
+		settings.dropLootCapacity = readNumber(*config, "DropLootCapacity", settings.dropLootCapacity, 100000);
+		settings.dropGoldNoCapacity = readBool(*config, "DropGoldNoCapacity", settings.dropLootNoCapacity);
+		settings.dropGoldCapacity = readNumber(*config, "DropGoldCapacity", settings.dropLootCapacity, 100000);
 		settings.lootItemIds = readText(*config, "LootItemIds", settings.lootItemIds);
 		settings.lootDestinationContainer = SDL_static_cast(Uint8, readNumber(*config, "LootDestination", settings.lootDestinationContainer, GAME_MAX_CONTAINERS - 1));
 		settings.playerAlertEnabled = readBool(*config, "PlayerAlertEnabled", settings.playerAlertEnabled);
@@ -260,6 +263,9 @@ void CaveBot::saveConfig()
 	config.insertKey("LootGold", boolText(m_settings.lootGold));
 	config.insertKey("LootAfterKill", boolText(m_settings.lootAfterKill));
 	config.insertKey("DropLootNoCapacity", boolText(m_settings.dropLootNoCapacity));
+	config.insertKey("DropLootCapacity", numberText(m_settings.dropLootCapacity));
+	config.insertKey("DropGoldNoCapacity", boolText(m_settings.dropGoldNoCapacity));
+	config.insertKey("DropGoldCapacity", numberText(m_settings.dropGoldCapacity));
 	config.insertKey("LootItemIds", m_settings.lootItemIds);
 	config.insertKey("LootDestination", numberText(m_settings.lootDestinationContainer));
 	config.insertKey("PlayerAlertEnabled", boolText(m_settings.playerAlertEnabled));
@@ -293,6 +299,8 @@ void CaveBot::applySettings(const CaveBotSettings& settings)
 	m_settings.reachDistance = UTIL_min<Uint8>(5, m_settings.reachDistance);
 	m_settings.retryDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.retryDelay));
 	m_settings.attackDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.attackDelay));
+	m_settings.dropLootCapacity = UTIL_min<Uint32>(100000, m_settings.dropLootCapacity);
+	m_settings.dropGoldCapacity = UTIL_min<Uint32>(100000, m_settings.dropGoldCapacity);
 	if(m_settings.targetMovement > CAVEBOT_TARGET_DIAGONAL_DISTANCE_2)
 		m_settings.targetMovement = CAVEBOT_TARGET_STAND;
 	resetRuntime();
@@ -311,6 +319,7 @@ void CaveBot::setCurrentWaypoint(size_t index)
 	m_nextWalkAction = 0;
 	m_lastWalkRequest = 0;
 	m_walkPositionValid = false;
+	m_reselectWaypointAfterCombat = false;
 	if(g_engine.isIngame())
 		g_game.processTextMessage(MessageLogin, std::string("CaveBot: waypoint selecionado: ") + numberText(SDL_static_cast(Uint32, index + 1)) + ".");
 }
@@ -343,6 +352,7 @@ void CaveBot::resetRuntime()
 	m_lastWalkRequest = 0;
 	m_walkNoProgressSince = 0;
 	m_walkPositionValid = false;
+	m_reselectWaypointAfterCombat = false;
 	m_floorTransitionPending = false;
 	m_floorTransitionSourceZ = 0;
 	m_floorTransitionSince = 0;
@@ -881,6 +891,20 @@ bool CaveBot::useCorpseGold(Container* source)
 		if(!item || !isCurrencyCoin(item->getID()))
 			continue;
 
+		double capacity = g_game.getPlayerCapacity();
+		bool dropOnGround = (m_settings.dropGoldNoCapacity && capacity < m_settings.dropGoldCapacity);
+		if(dropOnGround)
+		{
+			Creature* local = g_map.getLocalCreature();
+			if(!local)
+				return false;
+			g_game.sendMove(item->getCurrentPosition(), item->getID(), 0,
+				local->getCurrentPosition(), item->getItemCount());
+			return true;
+		}
+		if(capacity <= 0.01)
+			return false;
+
 		Position position = item->getCurrentPosition();
 		g_game.sendUseItem(position, item->getID(), 0, source->getCid());
 		return true;
@@ -894,7 +918,11 @@ bool CaveBot::lootOneItem(Container* source)
 		return false;
 
 	Container* destination = g_game.findContainer(m_settings.lootDestinationContainer);
-	bool dropOnGround = (m_settings.dropLootNoCapacity && g_game.getPlayerCapacity() <= 0.0);
+	double capacity = g_game.getPlayerCapacity();
+	bool noCapacity = (capacity <= 0.01);
+	bool dropOnGround = (m_settings.dropLootNoCapacity && capacity < m_settings.dropLootCapacity);
+	if(noCapacity && !dropOnGround)
+		return false;
 	if(!dropOnGround && (!destination || destination->getItems().size() >= SDL_static_cast(size_t, destination->getCapacity())))
 		return false;
 
@@ -1253,20 +1281,28 @@ void CaveBot::updateWalker(Uint32 now)
 	}
 	Creature* activeTarget = g_map.getCreatureById(g_game.getAttackID());
 	bool fighting = (activeTarget && activeTarget->getHealth() > 0);
+	bool pausedForCombat = (fighting && (m_settings.pauseWhileTarget || m_settings.targetMovement != CAVEBOT_TARGET_STAND));
 	if((m_settings.pauseOnPlayer && m_playerDetected) ||
-		(fighting && (m_settings.pauseWhileTarget || m_settings.targetMovement != CAVEBOT_TARGET_STAND)) || shouldPauseForLoot())
+		pausedForCombat || shouldPauseForLoot())
 	{
+		if(pausedForCombat)
+			m_reselectWaypointAfterCombat = true;
 		m_walkPositionValid = false;
 		return;
 	}
 	Creature* local = g_map.getLocalCreature();
 	if(!local)
 		return;
+	Position current = local->getCurrentPosition();
+	if(m_reselectWaypointAfterCombat)
+	{
+		selectNearestWaypoint(current);
+		m_reselectWaypointAfterCombat = false;
+	}
 	if(m_currentWaypoint >= m_waypoints.size())
 		m_currentWaypoint = 0;
 
 	CaveBotWaypoint& waypoint = m_waypoints[m_currentWaypoint];
-	Position current = local->getCurrentPosition();
 
 	// A recorded use followed by another floor means that the used square is
 	// the opened hole/stair. Wait for the server to transform it and then step
@@ -1383,6 +1419,36 @@ void CaveBot::updateWalker(Uint32 now)
 			saveConfig();
 		}
 	}
+}
+
+void CaveBot::selectNearestWaypoint(const Position& current)
+{
+	if(m_waypoints.empty())
+		return;
+
+	size_t routeAnchor = m_currentWaypoint < m_waypoints.size() ? m_currentWaypoint : 0;
+	size_t bestIndex = routeAnchor;
+	Uint32 bestDistance = SDL_MAX_UINT32;
+	size_t bestForwardDistance = m_waypoints.size();
+	for(size_t index = 0; index < m_waypoints.size(); ++index)
+	{
+		const Position& position = m_waypoints[index].position;
+		if(position.z != current.z)
+			continue;
+		Uint32 distance = UTIL_max<Uint32>(Position::getDistanceX(current, position), Position::getDistanceY(current, position));
+		size_t forwardDistance = (index + m_waypoints.size() - routeAnchor) % m_waypoints.size();
+		if(distance < bestDistance || (distance == bestDistance && forwardDistance < bestForwardDistance))
+		{
+			bestDistance = distance;
+			bestForwardDistance = forwardDistance;
+			bestIndex = index;
+		}
+	}
+
+	m_currentWaypoint = bestIndex;
+	m_lastWalkRequest = 0;
+	m_walkNoProgressSince = 0;
+	m_walkPositionValid = false;
 }
 
 void CaveBot::updateBurstArrows(Uint32 now)

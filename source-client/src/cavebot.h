@@ -69,6 +69,9 @@ struct CaveBotSettings
 	bool lootGold = false;
 	bool lootAfterKill = false;
 	bool dropLootNoCapacity = false;
+	Uint32 dropLootCapacity = 1;
+	bool dropGoldNoCapacity = false;
+	Uint32 dropGoldCapacity = 1;
 	std::string lootItemIds;
 	Uint8 lootDestinationContainer = 0;
 
@@ -122,6 +125,7 @@ class CaveBot
 		void updateLooter(Uint32 now);
 		void updateBurstArrows(Uint32 now);
 		void updateWalker(Uint32 now);
+		void selectNearestWaypoint(const Position& current);
 		bool hasVisibleLivingMonster() const;
 		bool shouldPauseForLoot() const;
 		void finishLootTarget(Uint32 now);
@@ -138,6 +142,7 @@ class CaveBot
 		Uint32 m_walkNoProgressSince = 0;
 		Position m_lastWalkPosition;
 		bool m_walkPositionValid = false;
+		bool m_reselectWaypointAfterCombat = false;
 		bool m_floorTransitionPending = false;
 		Position m_floorTransitionPosition;
 		Uint8 m_floorTransitionSourceZ = 0;

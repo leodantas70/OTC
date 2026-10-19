@@ -997,6 +997,10 @@ void Engine::run()
 		m_windowW = m_windowCachedW;
 		m_windowH = m_windowCachedH;
 	}
+	#if defined(__WIN32__)
+	SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON, "101");
+	SDL_SetHint(SDL_HINT_WINDOWS_INTRESOURCE_ICON_SMALL, "101");
+	#endif
 	
 	m_window = SDL_CreateWindow(PRODUCT_NAME, m_windowX, m_windowY, m_windowW, m_windowH, windowflags);
 	if(!m_window)

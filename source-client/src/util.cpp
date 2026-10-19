@@ -85,8 +85,31 @@ std::string UTIL_protocolDebugLogPath()
 	return "tfc_protocol_debug.log";
 }
 
+static bool protocolDebugEnabled()
+{
+	static const bool enabled = []() {
+		const std::string fileName = "protocol-debug.enable";
+		const std::string prefMarker = (g_prefPath.empty() ? std::string() : g_prefPath + fileName);
+		const std::string baseMarker = (g_basePath.empty() ? fileName : g_basePath + fileName);
+		std::ifstream marker;
+		if(!prefMarker.empty())
+		{
+			marker.open(prefMarker.c_str(), std::ios::in);
+			if(marker.is_open())
+				return true;
+			marker.clear();
+		}
+		marker.open(baseMarker.c_str(), std::ios::in);
+		return marker.is_open();
+	}();
+	return enabled;
+}
+
 void UTIL_protocolDebugLog(const char* scope, const char* format, ...)
 {
+	if(!protocolDebugEnabled())
+		return;
+
 	char message[2048];
 	va_list args;
 	va_start(args, format);
@@ -114,6 +137,9 @@ void UTIL_protocolDebugLog(const char* scope, const char* format, ...)
 
 void UTIL_protocolDebugDumpMessage(const char* scope, const char* direction, const Uint8* buffer, Uint16 size, Uint16 readPos, Uint8 opcode)
 {
+	if(!protocolDebugEnabled())
+		return;
+
 	const Uint16 dumpSize = UTIL_min<Uint16>(size, 512);
 	UTIL_protocolDebugLog(scope, "%s packet opcode=0x%02X size=%u readPos=%u dumpBytes=%u", (direction ? direction : "packet"), SDL_static_cast(Uint32, opcode), SDL_static_cast(Uint32, size), SDL_static_cast(Uint32, readPos), SDL_static_cast(Uint32, dumpSize));
 

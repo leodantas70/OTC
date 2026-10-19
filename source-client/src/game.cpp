@@ -40,6 +40,16 @@ extern Automap g_automap;
 extern Connection* g_connection;
 extern Uint32 g_frameTime;
 
+static bool isLootTextMessage(const std::string& text)
+{
+	size_t begin = text.find_first_not_of(" \t\r\n");
+	if(begin == std::string::npos)
+		return false;
+	static const char prefix[] = "loot of ";
+	return (text.size() - begin >= sizeof(prefix) - 1 &&
+		SDL_strncasecmp(text.c_str() + begin, prefix, sizeof(prefix) - 1) == 0);
+}
+
 Game::Game() : m_autoWalkDestination(0xFFFF, 0xFFFF, 0xFF), m_limitWalkDestination(0xFFFF, 0xFFFF, 0xFF), m_lastCancelWalkPos(0xFFFF, 0xFFFF, 0xFF)
 {
 	for(Uint8 skill = 0; skill < Skills_LastAdditionalSkill; ++skill)
@@ -471,6 +481,16 @@ void Game::processEditHouseWindow(Uint8 doorId, Uint32 windowId, const std::stri
 
 void Game::processTextMessage(MessageMode mode, const std::string& text, Uint32 channelId)
 {
+	// Protocols from the 7.x era do not have a dedicated MessageLoot mode.
+	// Their "Loot of ..." text arrives as a status/game message, so classify it
+	// by content before it can be copied to Server Log.
+	if(mode != MessageLoot && isLootTextMessage(text))
+	{
+		g_map.addOnscreenText(ONSCREEN_MESSAGE_BOTTOM, MessageLoot, text);
+		g_chat.addLootMessage(text, time(NULL));
+		return;
+	}
+
 	switch(mode)
 	{
 		case MessageChannelManagement:
@@ -540,8 +560,13 @@ void Game::processTextMessage(MessageMode mode, const std::string& text, Uint32 
 				g_chat.addChannelMessage(CHANNEL_ID_SERVERLOG, mode, 0, "", 0, text, time(NULL));
 		}
 		break;
-		case MessageLook:
 		case MessageLoot:
+		{
+			g_map.addOnscreenText(ONSCREEN_MESSAGE_CENTER_HIGH, mode, text);
+			g_chat.addLootMessage(text, time(NULL));
+		}
+		break;
+		case MessageLook:
 		case MessageTradeNpc:
 		case MessageHotkeyUse:
 		{
@@ -681,7 +706,9 @@ void Game::processPlayerModes(Uint8 fightMode, Uint8 chaseMode, Uint8 safeMode, 
 {
 	g_engine.setAttackMode(fightMode);
 	g_engine.setChaseMode(chaseMode);
-	g_engine.setSecureMode(safeMode);
+	// The protocol encodes safe fight as 1 = enabled and 0 = disabled,
+	// while the client enum uses 0 = secure and 1 = unsecure.
+	g_engine.setSecureMode(safeMode != 0 ? SECUREMODE_SECURE : SECUREMODE_UNSECURE);
 	g_engine.setPvpMode(pvpMode);
 }
 

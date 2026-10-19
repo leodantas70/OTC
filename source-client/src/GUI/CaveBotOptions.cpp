@@ -52,6 +52,7 @@
 #define CAVEBOT_LOOT_AFTER_KILL_EVENTID 1110
 #define CAVEBOT_BURST_ARROW_EVENTID 1111
 #define CAVEBOT_DROP_LOOT_NO_CAP_EVENTID 1112
+#define CAVEBOT_DROP_GOLD_NO_CAP_EVENTID 1113
 
 #define CAVEBOT_REACH_EVENTID 1200
 #define CAVEBOT_RETRY_EVENTID 1201
@@ -66,6 +67,8 @@
 #define CAVEBOT_LOOT_IDS_EVENTID 1210
 #define CAVEBOT_LOOT_DESTINATION_EVENTID 1211
 #define CAVEBOT_IGNORED_PLAYERS_EVENTID 1212
+#define CAVEBOT_DROP_LOOT_CAPACITY_EVENTID 1213
+#define CAVEBOT_DROP_GOLD_CAPACITY_EVENTID 1214
 #define CAVEBOT_WAYPOINT_LIST_EVENTID 1300
 #define CAVEBOT_TARGET_MOVEMENT_LIST_EVENTID 1301
 
@@ -429,6 +432,9 @@ namespace
 		settings.lootGold = getChecked(window, CAVEBOT_LOOT_GOLD_EVENTID);
 		settings.lootAfterKill = getChecked(window, CAVEBOT_LOOT_AFTER_KILL_EVENTID);
 		settings.dropLootNoCapacity = getChecked(window, CAVEBOT_DROP_LOOT_NO_CAP_EVENTID);
+		settings.dropLootCapacity = getNumber(window, CAVEBOT_DROP_LOOT_CAPACITY_EVENTID, 100000);
+		settings.dropGoldNoCapacity = getChecked(window, CAVEBOT_DROP_GOLD_NO_CAP_EVENTID);
+		settings.dropGoldCapacity = getNumber(window, CAVEBOT_DROP_GOLD_CAPACITY_EVENTID, 100000);
 		settings.lootItemIds = getText(window, CAVEBOT_LOOT_IDS_EVENTID);
 		settings.lootDestinationContainer = SDL_static_cast(Uint8, getNumber(window, CAVEBOT_LOOT_DESTINATION_EVENTID, GAME_MAX_CONTAINERS - 1));
 		settings.playerAlertEnabled = getChecked(window, CAVEBOT_ALERT_ENABLED_EVENTID);
@@ -699,7 +705,10 @@ void UTIL_caveBotOptions()
 	addTextBox(window, 189, 570, 35, numberText(settings.lootDestinationContainer), CAVEBOT_LOOT_DESTINATION_EVENTID, 2, true);
 	addCheckBox(window, 245, 568, 150, "Loot after kill", settings.lootAfterKill, CAVEBOT_LOOT_AFTER_KILL_EVENTID);
 	addButton(window, 474, 566, "Lista itens", CAVEBOT_LOOT_ITEM_LIST_EVENTID);
-	addCheckBox(window, 18, 594, 300, "Jogar loot no chao sem cap", settings.dropLootNoCapacity, CAVEBOT_DROP_LOOT_NO_CAP_EVENTID);
+	addCheckBox(window, 18, 594, 175, "Itens no chao com cap <", settings.dropLootNoCapacity, CAVEBOT_DROP_LOOT_NO_CAP_EVENTID);
+	addTextBox(window, 195, 590, 55, numberText(settings.dropLootCapacity), CAVEBOT_DROP_LOOT_CAPACITY_EVENTID, 6, true);
+	addCheckBox(window, 280, 594, 175, "Gold no chao com cap <", settings.dropGoldNoCapacity, CAVEBOT_DROP_GOLD_NO_CAP_EVENTID);
+	addTextBox(window, 458, 590, 55, numberText(settings.dropGoldCapacity), CAVEBOT_DROP_GOLD_CAPACITY_EVENTID, 6, true);
 	window->addChild(new GUI_Separator(iRect(13, 622, CAVEBOT_OPTIONS_WIDTH - 26, 2)));
 
 	addCheckBox(window, 18, 630, 145, "Alerta de player", settings.playerAlertEnabled, CAVEBOT_ALERT_ENABLED_EVENTID);
