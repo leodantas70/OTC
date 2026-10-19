@@ -714,13 +714,19 @@ void Assistant::tick()
 			else if(equippedRing)
 				m_energyRingSlotMissingSince = 0;
 
-			// A manually equipped ring may occupy the slot. Sending the emergency
-			// ring to SLOT_RING lets the server replace it; confirmation above then
-			// records the transformed id without blocking healing.
+			// Old 7.x servers may reject a direct exchange with an occupied equipment
+			// slot. Vacate the current ring first and equip the emergency ring on the
+			// following fast retry (normally within 80 ms).
 			if(!m_energyRingActive && !m_energyRingEquipPending && SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
 			{
 				m_energyRingPreviousId = equippedRingId;
-				if(equipItem(SLOT_RING, m_settings.energyRingId, m_settings.energyRingSubtype))
+				bool actionSent = false;
+				if(equippedRing)
+					actionSent = unequipItem(SLOT_RING, 0);
+				else
+					actionSent = equipItem(SLOT_RING, m_settings.energyRingId, m_settings.energyRingSubtype);
+
+				if(actionSent && !equippedRing)
 				{
 					m_energyRingEquipPending = true;
 					m_energyRingRequestTime = now;
@@ -752,30 +758,36 @@ void Assistant::tick()
 				}
 				else if(!m_energyRingUnequipPending && SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
 				{
-					bool actionSent = false;
-					Position preferredPosition;
-					Uint8 preferredStackpos = m_settings.preferredRingSubtype;
-					if(m_settings.preferredRingId != 0 &&
-						findItem(m_settings.preferredRingId, m_settings.preferredRingSubtype, preferredPosition, preferredStackpos))
-					{
-						actionSent = equipItem(SLOT_RING, m_settings.preferredRingId, m_settings.preferredRingSubtype);
-						if(actionSent)
-							m_energyRingRestoreTargetId = m_settings.preferredRingId;
-					}
-
-					// If the selected normal ring is not available in an open backpack,
-					// retain the old behavior and simply remove the Energy Ring.
-					if(!actionSent)
-					{
-						actionSent = unequipItem(SLOT_RING, 0);
-						m_energyRingRestoreTargetId = 0;
-					}
+					// Remove the Energy Ring first. The normal-ring maintenance below
+					// equips the selected ring as soon as the server confirms an empty slot.
+					bool actionSent = unequipItem(SLOT_RING, 0);
+					m_energyRingRestoreTargetId = 0;
 
 					if(actionSent)
 					{
 						m_energyRingUnequipPending = true;
 						m_energyRingRequestTime = now;
 					}
+					m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
+				}
+			}
+
+			// Keep the selected normal ring equipped whenever HP is safely above the
+			// removal threshold, including after login or a manual removal. This does
+			// not depend on the previous Energy Ring latch.
+			if(!m_energyRingActive && !m_energyRingUnequipPending &&
+				m_settings.preferredRingId != 0 &&
+				!isEquipped(SLOT_RING, m_settings.preferredRingId) &&
+				SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
+			{
+				Position preferredPosition;
+				Uint8 preferredStackpos = m_settings.preferredRingSubtype;
+				if(findItem(m_settings.preferredRingId, m_settings.preferredRingSubtype, preferredPosition, preferredStackpos))
+				{
+					if(equippedRing)
+						unequipItem(SLOT_RING, 0);
+					else
+						equipItem(SLOT_RING, m_settings.preferredRingId, m_settings.preferredRingSubtype);
 					m_nextEnergyRingRetry = now + ASSISTANT_EQUIPMENT_RETRY_DELAY;
 				}
 			}
