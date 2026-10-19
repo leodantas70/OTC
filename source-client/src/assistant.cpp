@@ -176,6 +176,8 @@ void Assistant::loadCharacterConfig(const std::string& characterName)
 		settings.energyRingUnequipPercent = SDL_static_cast(Uint8, readNumber(*config, "EnergyRingUnequipPercent", settings.energyRingUnequipPercent, 100));
 		settings.energyRingId = SDL_static_cast(Uint16, readNumber(*config, "EnergyRingId", settings.energyRingId, 65535));
 		settings.energyRingSubtype = SDL_static_cast(Uint8, readNumber(*config, "EnergyRingSubtype", settings.energyRingSubtype, 255));
+		settings.preferredRingId = SDL_static_cast(Uint16, readNumber(*config, "PreferredRingId", settings.preferredRingId, 65535));
+		settings.preferredRingSubtype = SDL_static_cast(Uint8, readNumber(*config, "PreferredRingSubtype", settings.preferredRingSubtype, 255));
 		settings.amuletEnabled = readBool(*config, "AmuletEnabled", settings.amuletEnabled);
 		settings.amuletSwitchPercent = SDL_static_cast(Uint8, readNumber(*config, "AmuletSwitchPercent", settings.amuletSwitchPercent, 100));
 		settings.lowHealthAmuletId = SDL_static_cast(Uint16, readNumber(*config, "LowHealthAmuletId", settings.lowHealthAmuletId, 65535));
@@ -229,6 +231,8 @@ void Assistant::saveConfig()
 	config.insertKey("EnergyRingUnequipPercent", numberText(m_settings.energyRingUnequipPercent));
 	config.insertKey("EnergyRingId", numberText(m_settings.energyRingId));
 	config.insertKey("EnergyRingSubtype", numberText(m_settings.energyRingSubtype));
+	config.insertKey("PreferredRingId", numberText(m_settings.preferredRingId));
+	config.insertKey("PreferredRingSubtype", numberText(m_settings.preferredRingSubtype));
 	config.insertKey("AmuletEnabled", boolText(m_settings.amuletEnabled));
 	config.insertKey("AmuletSwitchPercent", numberText(m_settings.amuletSwitchPercent));
 	config.insertKey("LowHealthAmuletId", numberText(m_settings.lowHealthAmuletId));
@@ -661,12 +665,16 @@ void Assistant::tick()
 
 		if(m_energyRingUnequipPending)
 		{
-			if(!equippedRing)
+			bool restoreConfirmed = (m_energyRingRestoreTargetId != 0 && equippedRing && equippedRingId == m_energyRingRestoreTargetId);
+			bool removalConfirmed = (m_energyRingRestoreTargetId == 0 && !equippedRing);
+			if(restoreConfirmed || removalConfirmed)
 			{
-				// Server-confirmed removal. Do not clear the latch when merely sending
-				// the move, otherwise a refused packet leaves the ring stuck forever.
+				// Server-confirmed removal/replacement. Do not clear the latch when
+				// merely sending the move, otherwise a refused packet leaves the
+				// emergency ring stuck forever.
 				m_energyRingActive = false;
 				m_energyRingEquippedId = 0;
+				m_energyRingRestoreTargetId = 0;
 				m_energyRingUnequipPending = false;
 				m_energyRingSlotMissingSince = 0;
 			}
@@ -674,9 +682,22 @@ void Assistant::tick()
 				m_energyRingUnequipPending = false;
 		}
 
+		// A replacement request may arrive while HP is falling again, or the
+		// player may manually change the ring. Re-arm the emergency logic as soon
+		// as the slot no longer contains the ring that this assistant equipped.
+		if(m_energyRingActive && equippedRing && m_energyRingEquippedId != 0 &&
+			equippedRingId != m_energyRingEquippedId && !isEnergyRingId(equippedRingId, m_settings.energyRingId))
+		{
+			m_energyRingActive = false;
+			m_energyRingEquippedId = 0;
+			m_energyRingRestoreTargetId = 0;
+			m_energyRingUnequipPending = false;
+		}
+
 		if(healthPercent <= m_settings.energyRingEquipPercent)
 		{
 			m_energyRingUnequipPending = false;
+			m_energyRingRestoreTargetId = 0;
 
 			// If the server removed/expired the emergency ring, confirm the empty
 			// slot very briefly and immediately look for another one.
@@ -731,7 +752,26 @@ void Assistant::tick()
 				}
 				else if(!m_energyRingUnequipPending && SDL_TICKS_PASSED(now, m_nextEnergyRingRetry))
 				{
-					if(unequipItem(SLOT_RING, 0))
+					bool actionSent = false;
+					Position preferredPosition;
+					Uint8 preferredStackpos = m_settings.preferredRingSubtype;
+					if(m_settings.preferredRingId != 0 &&
+						findItem(m_settings.preferredRingId, m_settings.preferredRingSubtype, preferredPosition, preferredStackpos))
+					{
+						actionSent = equipItem(SLOT_RING, m_settings.preferredRingId, m_settings.preferredRingSubtype);
+						if(actionSent)
+							m_energyRingRestoreTargetId = m_settings.preferredRingId;
+					}
+
+					// If the selected normal ring is not available in an open backpack,
+					// retain the old behavior and simply remove the Energy Ring.
+					if(!actionSent)
+					{
+						actionSent = unequipItem(SLOT_RING, 0);
+						m_energyRingRestoreTargetId = 0;
+					}
+
+					if(actionSent)
 					{
 						m_energyRingUnequipPending = true;
 						m_energyRingRequestTime = now;
@@ -837,6 +877,7 @@ void Assistant::resetRuntime()
 	m_energyRingRequestTime = 0;
 	m_energyRingSlotMissingSince = 0;
 	m_energyRingPreviousId = 0;
+	m_energyRingRestoreTargetId = 0;
 	m_energyRingEquipPending = false;
 	m_energyRingUnequipPending = false;
 	// Preserve the emergency-ring latch while settings are saved. A normal ring

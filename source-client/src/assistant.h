@@ -31,6 +31,8 @@ struct AssistantSettings
 	Uint8 energyRingUnequipPercent = 70;
 	Uint16 energyRingId = 0;
 	Uint8 energyRingSubtype = 0;
+	Uint16 preferredRingId = 0;
+	Uint8 preferredRingSubtype = 0;
 	bool amuletEnabled = false;
 	Uint8 amuletSwitchPercent = 40;
 	Uint16 lowHealthAmuletId = 0;
@@ -101,6 +103,7 @@ class Assistant
 		Uint32 m_energyRingSlotMissingSince = 0;
 		Uint16 m_energyRingPreviousId = 0;
 		Uint16 m_energyRingEquippedId = 0;
+		Uint16 m_energyRingRestoreTargetId = 0;
 		bool m_energyRingEquipPending = false;
 		bool m_energyRingUnequipPending = false;
 		bool m_energyRingActive = false;

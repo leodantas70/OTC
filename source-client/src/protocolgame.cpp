@@ -9220,10 +9220,11 @@ ItemUI* ProtocolGame::getItemUI(InputMessage& msg, Uint16 thingId)
 			msg.getU32();
 	}
 
-	// Old FasterOT appends one metadata byte to UI/inventory items. Map items
-	// do not carry it, so this must stay in getItemUI rather than getItem.
+	Uint8 classification = 0;
+	// Old FasterOT appends one classification byte to UI/inventory items. Map
+	// items do not carry it, so this must stay in getItemUI rather than getItem.
 	if(g_game.hasGameFeature(GAME_FEATURE_ITEM_TIER_BYTE) || shouldUseOldFaster772Handshake())
-		msg.getU8();
+		classification = msg.getU8();
 
 	Sint32 phase = AnimationPhase_Automatic;
 	if(g_game.hasGameFeature(GAME_FEATURE_ITEM_ANIMATION_PHASES))
@@ -9239,7 +9240,10 @@ ItemUI* ProtocolGame::getItemUI(InputMessage& msg, Uint16 thingId)
 				phase = SDL_static_cast(Sint32, startPhase);
 		}
 	}
-	return ItemUI::createItemUI(type, count, phase);
+	ItemUI* item = ItemUI::createItemUI(type, count, phase);
+	if(item)
+		item->setClassification(classification);
+	return item;
 }
 
 void ProtocolGame::setMapDescription(InputMessage& msg, Sint32 x, Sint32 y, Uint8 z, Sint32 width, Sint32 height)

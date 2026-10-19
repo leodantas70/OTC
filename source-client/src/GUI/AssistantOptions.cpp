@@ -13,7 +13,7 @@
 #include "../GUI_Elements/GUI_TextBox.h"
 
 #define ASSISTANT_OPTIONS_WIDTH 440
-#define ASSISTANT_OPTIONS_HEIGHT 670
+#define ASSISTANT_OPTIONS_HEIGHT 700
 #define ASSISTANT_CANCEL_EVENTID 1000
 #define ASSISTANT_OK_EVENTID 1001
 #define ASSISTANT_ENABLED_EVENTID 1100
@@ -43,6 +43,8 @@
 #define ASSISTANT_HIGH_AMULET_ID_EVENTID 1215
 #define ASSISTANT_HIGH_AMULET_SUBTYPE_EVENTID 1216
 #define ASSISTANT_AMMUNITION_ID_EVENTID 1217
+#define ASSISTANT_PREFERRED_RING_ID_EVENTID 1218
+#define ASSISTANT_PREFERRED_RING_SUBTYPE_EVENTID 1219
 
 #define AUTORUNE_OPTIONS_WIDTH 400
 #define AUTORUNE_OPTIONS_HEIGHT 400
@@ -144,6 +146,8 @@ void assistantOptions_Events(Uint32 event, Sint32)
 			settings.energyRingUnequipPercent = SDL_static_cast(Uint8, getNumber(window, ASSISTANT_ENERGY_RING_UNEQUIP_PERCENT_EVENTID, 100));
 			settings.energyRingId = SDL_static_cast(Uint16, getNumber(window, ASSISTANT_ENERGY_RING_ID_EVENTID, 65535));
 			settings.energyRingSubtype = SDL_static_cast(Uint8, getNumber(window, ASSISTANT_ENERGY_RING_SUBTYPE_EVENTID, 255));
+			settings.preferredRingId = SDL_static_cast(Uint16, getNumber(window, ASSISTANT_PREFERRED_RING_ID_EVENTID, 65535));
+			settings.preferredRingSubtype = SDL_static_cast(Uint8, getNumber(window, ASSISTANT_PREFERRED_RING_SUBTYPE_EVENTID, 255));
 			settings.amuletEnabled = getChecked(window, ASSISTANT_AMULET_ENABLED_EVENTID);
 			settings.amuletSwitchPercent = SDL_static_cast(Uint8, getNumber(window, ASSISTANT_AMULET_PERCENT_EVENTID, 100));
 			settings.lowHealthAmuletId = SDL_static_cast(Uint16, getNumber(window, ASSISTANT_LOW_AMULET_ID_EVENTID, 65535));
@@ -217,27 +221,32 @@ void UTIL_assistantOptions()
 	addTextBox(window, 78, 387, 70, numberText(settings.energyRingId), ASSISTANT_ENERGY_RING_ID_EVENTID, 5, true);
 	addLabel(window, 174, 391, "Subtipo:");
 	addTextBox(window, 225, 387, 48, numberText(settings.energyRingSubtype), ASSISTANT_ENERGY_RING_SUBTYPE_EVENTID, 3, true);
-	window->addChild(new GUI_Separator(iRect(13, 416, ASSISTANT_OPTIONS_WIDTH - 26, 2)));
+	addLabel(window, 26, 420, "Ring normal ID:");
+	addTextBox(window, 112, 416, 70, numberText(settings.preferredRingId), ASSISTANT_PREFERRED_RING_ID_EVENTID, 5, true);
+	addLabel(window, 198, 420, "Subtipo:");
+	addTextBox(window, 249, 416, 48, numberText(settings.preferredRingSubtype), ASSISTANT_PREFERRED_RING_SUBTYPE_EVENTID, 3, true);
+	addLabel(window, 307, 420, "0 = deixar vazio");
+	window->addChild(new GUI_Separator(iRect(13, 445, ASSISTANT_OPTIONS_WIDTH - 26, 2)));
 
-	addCheckBox(window, 18, 425, 250, "Auto SSA / troca de amuleto", settings.amuletEnabled, ASSISTANT_AMULET_ENABLED_EVENTID);
-	addLabel(window, 26, 458, "Trocar em HP:");
-	addTextBox(window, 106, 454, 42, numberText(settings.amuletSwitchPercent), ASSISTANT_AMULET_PERCENT_EVENTID, 3, true);
-	addLabel(window, 153, 458, "%");
-	addLabel(window, 26, 487, "HP baixo ID:");
-	addTextBox(window, 106, 483, 70, numberText(settings.lowHealthAmuletId), ASSISTANT_LOW_AMULET_ID_EVENTID, 5, true);
-	addLabel(window, 190, 487, "Sub:");
-	addTextBox(window, 223, 483, 48, numberText(settings.lowHealthAmuletSubtype), ASSISTANT_LOW_AMULET_SUBTYPE_EVENTID, 3, true);
-	addLabel(window, 26, 516, "HP alto ID:");
-	addTextBox(window, 106, 512, 70, numberText(settings.highHealthAmuletId), ASSISTANT_HIGH_AMULET_ID_EVENTID, 5, true);
+	addCheckBox(window, 18, 454, 250, "Auto SSA / troca de amuleto", settings.amuletEnabled, ASSISTANT_AMULET_ENABLED_EVENTID);
+	addLabel(window, 26, 487, "Trocar em HP:");
+	addTextBox(window, 106, 483, 42, numberText(settings.amuletSwitchPercent), ASSISTANT_AMULET_PERCENT_EVENTID, 3, true);
+	addLabel(window, 153, 487, "%");
+	addLabel(window, 26, 516, "HP baixo ID:");
+	addTextBox(window, 106, 512, 70, numberText(settings.lowHealthAmuletId), ASSISTANT_LOW_AMULET_ID_EVENTID, 5, true);
 	addLabel(window, 190, 516, "Sub:");
-	addTextBox(window, 223, 512, 48, numberText(settings.highHealthAmuletSubtype), ASSISTANT_HIGH_AMULET_SUBTYPE_EVENTID, 3, true);
-	window->addChild(new GUI_Separator(iRect(13, 541, ASSISTANT_OPTIONS_WIDTH - 26, 2)));
+	addTextBox(window, 223, 512, 48, numberText(settings.lowHealthAmuletSubtype), ASSISTANT_LOW_AMULET_SUBTYPE_EVENTID, 3, true);
+	addLabel(window, 26, 545, "HP alto ID:");
+	addTextBox(window, 106, 541, 70, numberText(settings.highHealthAmuletId), ASSISTANT_HIGH_AMULET_ID_EVENTID, 5, true);
+	addLabel(window, 190, 545, "Sub:");
+	addTextBox(window, 223, 541, 48, numberText(settings.highHealthAmuletSubtype), ASSISTANT_HIGH_AMULET_SUBTYPE_EVENTID, 3, true);
+	window->addChild(new GUI_Separator(iRect(13, 570, ASSISTANT_OPTIONS_WIDTH - 26, 2)));
 
-	addCheckBox(window, 18, 550, 250, "Auto municao (slot arrows)", settings.ammunitionEnabled, ASSISTANT_AMMUNITION_ENABLED_EVENTID);
-	addLabel(window, 26, 583, "Item ID:");
-	addTextBox(window, 78, 579, 70, numberText(settings.ammunitionId), ASSISTANT_AMMUNITION_ID_EVENTID, 5, true);
-	addLabel(window, 165, 583, "Bolt 3446 | Burst 3449 | Power 3450");
-	addLabel(window, 26, 608, "Equipa outra pilha automaticamente quando o slot ficar vazio.");
+	addCheckBox(window, 18, 579, 250, "Auto municao (slot arrows)", settings.ammunitionEnabled, ASSISTANT_AMMUNITION_ENABLED_EVENTID);
+	addLabel(window, 26, 612, "Item ID:");
+	addTextBox(window, 78, 608, 70, numberText(settings.ammunitionId), ASSISTANT_AMMUNITION_ID_EVENTID, 5, true);
+	addLabel(window, 165, 612, "Bolt 3446 | Burst 3449 | Power 3450");
+	addLabel(window, 26, 637, "Equipa outra pilha automaticamente quando o slot ficar vazio.");
 
 	window->addChild(new GUI_Separator(iRect(13, ASSISTANT_OPTIONS_HEIGHT - 40, ASSISTANT_OPTIONS_WIDTH - 26, 2)));
 	GUI_Button* button = new GUI_Button(iRect(ASSISTANT_OPTIONS_WIDTH - 109, ASSISTANT_OPTIONS_HEIGHT - 30, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), "Ok", CLIENT_GUI_ENTER_TRIGGER);

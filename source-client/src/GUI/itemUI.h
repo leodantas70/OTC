@@ -45,6 +45,8 @@ class ItemUI
 
 		SDL_INLINE Uint16 getItemCount() {return m_count;}
 		SDL_INLINE Uint8 getItemSubtype() {return m_subtype;}
+		SDL_INLINE Uint8 getClassification() const {return m_classification;}
+		SDL_INLINE void setClassification(Uint8 classification) {m_classification = classification;}
 
 		Uint16 getID();
 		void render(Sint32 posX, Sint32 posY, Sint32 scaled);
@@ -68,6 +70,7 @@ class ItemUI
 		Uint8 m_xPattern = 0;
 		Uint8 m_yPattern = 0;
 		Uint8 m_zPattern = 0;
+		Uint8 m_classification = 0;
 		bool m_displayCount = false;
 };
 

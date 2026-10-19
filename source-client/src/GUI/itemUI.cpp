@@ -29,6 +29,23 @@ extern Game g_game;
 extern ThingManager g_thingManager;
 extern Uint32 g_frameTime;
 
+namespace
+{
+	void getClassificationColor(Uint8 classification, Uint8& red, Uint8& green, Uint8& blue)
+	{
+		// Matches the familiar item-quality progression: green, blue, violet,
+		// gold and red. Custom classifications above five keep the highest color.
+		switch(classification)
+		{
+			case 1: red = 55; green = 210; blue = 85; break;
+			case 2: red = 65; green = 145; blue = 255; break;
+			case 3: red = 185; green = 80; blue = 255; break;
+			case 4: red = 255; green = 190; blue = 35; break;
+			default: red = 255; green = 65; blue = 45; break;
+		}
+	}
+}
+
 ItemUI* ItemUI::createItemUI(Uint16 itemId, Uint16 count, Sint32 phase)
 {
 	return ItemUI::createItemUI(g_thingManager.getThingType(ThingCategory_Item, itemId), count, phase);
@@ -277,7 +294,23 @@ void ItemUI::render(Sint32 posX, Sint32 posY, Sint32 scaled)
 	else
 		animation = 0;
 
+	if(m_classification > 0 && scaled >= 8)
+	{
+		Uint8 red, green, blue;
+		getClassificationColor(m_classification, red, green, blue);
+		auto& renderer = g_engine.getRender();
+		// Draw the soft color behind transparent sprite pixels and retain a
+		// crisp border so upgraded items remain visible on every dark UI panel.
+		renderer->fillRectangle(posX + 1, posY + 1, scaled - 2, scaled - 2, red, green, blue, 38);
+		renderer->drawRectangle(posX, posY, scaled, scaled, 1, red, green, blue, 230);
+	}
 	g_engine.drawItem(m_thingType, posX, posY, scaled, m_xPattern, m_yPattern, m_zPattern, animation);
+	if(m_classification > 0 && scaled >= 8)
+	{
+		Uint8 red, green, blue;
+		getClassificationColor(m_classification, red, green, blue);
+		g_engine.getRender()->fillRectangle(posX + scaled - 5, posY + scaled - 5, 4, 4, red, green, blue, 255);
+	}
 	if(m_displayCount)
 		g_engine.drawFont(CLIENT_FONT_OUTLINED, posX + scaled - 1, posY + scaled - 11, m_stringCount, 192, 192, 192, CLIENT_FONT_ALIGN_RIGHT);
 }
