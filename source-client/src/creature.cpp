@@ -29,6 +29,7 @@
 double Creature::speedA = 857.36;
 double Creature::speedB = 261.29;
 double Creature::speedC = -4795.01;
+bool Creature::s_revealInvisibleMonsters = false;
 
 extern Engine g_engine;
 extern Map g_map;
@@ -426,6 +427,8 @@ void Creature::render(Sint32 posX, Sint32 posY)
 		else
 			renderer->drawRectangle(squareX, squareY, squareW, squareH, 2, m_timedSquareRed, m_timedSquareGreen, m_timedSquareBlue, 255);
 	}
+	if(m_outfitInvisible && s_revealInvisibleMonsters && isMonster() && !m_lastVisibleThingType)
+		renderer->drawRectangle(squareX, squareY, squareW, squareH, 2, 64, 224, 255, 255);
 
 	if(m_mountType && m_thingType->m_category == ThingCategory_Creature)
 	{
@@ -878,6 +881,18 @@ void Creature::turnDirection(Direction direction)
 
 void Creature::setOutfit(Uint16 lookType, Uint16 lookTypeEx, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount)
 {
+	const bool invisible = (lookType == 0 && lookTypeEx == 0);
+	m_outfitInvisible = invisible;
+	if(invisible && s_revealInvisibleMonsters && isMonster() && m_lastVisibleThingType)
+	{
+		m_thingType = m_lastVisibleThingType;
+		m_mountType = m_lastVisibleMountType;
+		m_outfit = m_lastVisibleOutfit;
+		m_lookAddons = m_lastVisibleLookAddons;
+		refreshOutfitAnimators();
+		return;
+	}
+
 	if(lookType == 0)
 	{
 		if(lookTypeEx == 0)
@@ -893,6 +908,46 @@ void Creature::setOutfit(Uint16 lookType, Uint16 lookTypeEx, Uint8 lookHead, Uin
 	else
 		m_mountType = g_thingManager.getThingType(ThingCategory_Creature, lookMount);
 
+	m_outfit = (lookFeet << 24) | (lookLegs << 16) | (lookBody << 8) | (lookHead);
+	m_lookAddons = lookAddons;
+	if(!invisible && isMonster())
+	{
+		m_lastVisibleThingType = m_thingType;
+		m_lastVisibleMountType = m_mountType;
+		m_lastVisibleOutfit = m_outfit;
+		m_lastVisibleLookAddons = m_lookAddons;
+	}
+
+	refreshOutfitAnimators();
+}
+
+void Creature::setRevealInvisibleMonsters(bool enabled)
+{
+	s_revealInvisibleMonsters = enabled;
+}
+
+void Creature::refreshInvisibleOutfit()
+{
+	if(!m_outfitInvisible)
+		return;
+
+	if(s_revealInvisibleMonsters && isMonster() && m_lastVisibleThingType)
+	{
+		m_thingType = m_lastVisibleThingType;
+		m_mountType = m_lastVisibleMountType;
+		m_outfit = m_lastVisibleOutfit;
+		m_lookAddons = m_lastVisibleLookAddons;
+	}
+	else
+	{
+		m_thingType = g_thingManager.getThingType(ThingCategory_Effect, 13);
+		m_mountType = NULL;
+	}
+	refreshOutfitAnimators();
+}
+
+void Creature::refreshOutfitAnimators()
+{
 	for(Sint32 i = ThingFrameGroup_Default; i < ThingFrameGroup_Last; ++i)
 	{
 		m_outfitAnimator[i] = (m_thingType ? m_thingType->m_frameGroup[i].m_animator : NULL);
@@ -903,9 +958,6 @@ void Creature::setOutfit(Uint16 lookType, Uint16 lookTypeEx, Uint8 lookHead, Uin
 		if(m_mountAnimator[i])
 			m_mountAnimator[i]->resetAnimation(m_mountAnimation[i], AnimationPhase_Invalid);
 	}
-
-	m_outfit = (lookFeet << 24) | (lookLegs << 16) | (lookBody << 8) | (lookHead);
-	m_lookAddons = lookAddons;
 }
 
 void Creature::setSpeed(Uint16 speed)

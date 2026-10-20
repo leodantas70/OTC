@@ -42,6 +42,7 @@ class Creature : public Thing
 		Creature& operator=(Creature&&) = delete;
 
 		static double speedA, speedB, speedC;
+		static void setRevealInvisibleMonsters(bool enabled);
 
 		virtual Creature* getCreature() {return this;}
 		virtual const Creature* getCreature() const {return this;}
@@ -77,6 +78,7 @@ class Creature : public Thing
 		void setHealth(Uint8 health);
 		void turnDirection(Direction direction);
 		void setOutfit(Uint16 lookType, Uint16 lookTypeEx, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount);
+		void refreshInvisibleOutfit();
 		void setSpeed(Uint16 speed);
 		SDL_INLINE void setHelpers(Uint16 helpers) {m_helpers = helpers;}
 		void setSkull(Uint8 skull);
@@ -135,9 +137,14 @@ class Creature : public Thing
 		Sint32 getStepDuration(Sint32 groundSpeed, bool ignoreDiagonal);
 
 	protected:
+		void refreshOutfitAnimators();
+
+		static bool s_revealInvisibleMonsters;
 		std::string m_name;
 		ThingType* m_thingType = NULL;
 		ThingType* m_mountType = NULL;
+		ThingType* m_lastVisibleThingType = NULL;
+		ThingType* m_lastVisibleMountType = NULL;
 		Animator* m_outfitAnimator[ThingFrameGroup_Last] = {};
 		Animator* m_mountAnimator[ThingFrameGroup_Last] = {};
 		Animation m_outfitAnimation[ThingFrameGroup_Last];
@@ -172,12 +179,14 @@ class Creature : public Thing
 
 		Uint32 m_id = 0;
 		Uint32 m_outfit = 0x4C3A454E;
+		Uint32 m_lastVisibleOutfit = 0x4C3A454E;
 
 		Uint16 m_light[2] = {};
 		Uint16 m_speed = 220;
 		Uint16 m_helpers = 0;
 
 		Uint8 m_lookAddons = 0;
+		Uint8 m_lastVisibleLookAddons = 0;
 		Uint8 m_health = 100;
 		Uint8 m_skull = SKULL_NONE;
 		Uint8 m_shield = SHIELD_NONE;
@@ -216,6 +225,7 @@ class Creature : public Thing
 		bool m_showStatus = true;
 		bool m_isVisible = false;
 		bool m_needUpdate = false;
+		bool m_outfitInvisible = false;
 };
 
 #endif /* __FILE_CREATURE_h_ */
