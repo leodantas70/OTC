@@ -193,6 +193,7 @@ void Assistant::loadCharacterConfig(const std::string& characterName)
 	{
 		settings.enabled = readBool(*config, "Enabled", settings.enabled);
 		settings.fullLight = readBool(*config, "FullLight", settings.fullLight);
+		settings.revealInvisibleMonsters = readBool(*config, "RevealInvisibleMonsters", settings.revealInvisibleMonsters);
 		settings.healingEnabled = readBool(*config, "HealingEnabled", settings.healingEnabled);
 		settings.healingUseRune = readBool(*config, "HealingUseRune", settings.healingUseRune);
 		settings.healingPercent = SDL_static_cast(Uint8, readNumber(*config, "HealingPercent", settings.healingPercent, 100));
@@ -248,6 +249,7 @@ void Assistant::saveConfig()
 
 	config.insertKey("Enabled", boolText(m_settings.enabled));
 	config.insertKey("FullLight", boolText(m_settings.fullLight));
+	config.insertKey("RevealInvisibleMonsters", boolText(m_settings.revealInvisibleMonsters));
 	config.insertKey("HealingEnabled", boolText(m_settings.healingEnabled));
 	config.insertKey("HealingUseRune", boolText(m_settings.healingUseRune));
 	config.insertKey("HealingPercent", numberText(m_settings.healingPercent));
@@ -291,7 +293,18 @@ void Assistant::saveConfig()
 void Assistant::applySettings(const AssistantSettings& settings)
 {
 	bool oldFullLight = m_settings.fullLight;
+	bool revealInvisibleChanged = (m_settings.revealInvisibleMonsters != settings.revealInvisibleMonsters);
 	m_settings = settings;
+	Creature::setRevealInvisibleMonsters(m_settings.revealInvisibleMonsters);
+	if(revealInvisibleChanged)
+	{
+		knownCreatures& creatures = g_map.getKnownCreatures();
+		for(knownCreatures::iterator it = creatures.begin(), end = creatures.end(); it != end; ++it)
+		{
+			if(it->second)
+				it->second->refreshInvisibleOutfit();
+		}
+	}
 	if(m_settings.healingPercent > 100)
 		m_settings.healingPercent = 100;
 	if(m_settings.manaPercent > 100)

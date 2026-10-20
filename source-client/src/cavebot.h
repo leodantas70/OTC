@@ -64,7 +64,6 @@ struct CaveBotSettings
 	Uint8 attackRuneSubtype = 0;
 	Uint32 attackDelay = 900;
 	CaveBotTargetMovement targetMovement = CAVEBOT_TARGET_STAND;
-	bool revealInvisibleMonsters = false;
 
 	bool lootEnabled = false;
 	bool lootGold = false;

@@ -53,7 +53,6 @@
 #define CAVEBOT_BURST_ARROW_EVENTID 1111
 #define CAVEBOT_DROP_LOOT_NO_CAP_EVENTID 1112
 #define CAVEBOT_DROP_GOLD_NO_CAP_EVENTID 1113
-#define CAVEBOT_REVEAL_INVISIBLE_EVENTID 1114
 
 #define CAVEBOT_REACH_EVENTID 1200
 #define CAVEBOT_RETRY_EVENTID 1201
@@ -422,7 +421,6 @@ namespace
 		settings.attackRuneId = SDL_static_cast(Uint16, getNumber(window, CAVEBOT_RUNE_ID_EVENTID, 65535));
 		settings.attackRuneSubtype = SDL_static_cast(Uint8, getNumber(window, CAVEBOT_RUNE_SUBTYPE_EVENTID, 255));
 		settings.attackDelay = getNumber(window, CAVEBOT_ATTACK_DELAY_EVENTID, 10000);
-		settings.revealInvisibleMonsters = getChecked(window, CAVEBOT_REVEAL_INVISIBLE_EVENTID);
 		GUI_ListBox* movementList = SDL_static_cast(GUI_ListBox*, window->getChild(CAVEBOT_TARGET_MOVEMENT_LIST_EVENTID));
 		if(movementList)
 		{
@@ -683,7 +681,6 @@ void UTIL_caveBotOptions()
 	addTextBox(window, 184, 412, 40, numberText(settings.attackRuneSubtype), CAVEBOT_RUNE_SUBTYPE_EVENTID, 3, true);
 	addLabel(window, 240, 416, "Intervalo (ms):");
 	addTextBox(window, 327, 412, 65, numberText(settings.attackDelay), CAVEBOT_ATTACK_DELAY_EVENTID, 5, true);
-	addCheckBox(window, 405, 407, 155, "Revelar invisiveis", settings.revealInvisibleMonsters, CAVEBOT_REVEAL_INVISIBLE_EVENTID);
 	addLabel(window, 18, 449, "Movimento:");
 	GUI_ListBox* movementList = new GUI_ListBox(iRect(88, 438, 180, 91), CAVEBOT_TARGET_MOVEMENT_LIST_EVENTID);
 	movementList->add("Atacar parado");

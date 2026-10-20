@@ -184,7 +184,6 @@ void CaveBot::loadCharacterConfig(const std::string& characterName)
 		settings.attackRuneSubtype = SDL_static_cast(Uint8, readNumber(*config, "AttackRuneSubtype", settings.attackRuneSubtype, 255));
 		settings.attackDelay = readNumber(*config, "AttackDelay", settings.attackDelay, 10000);
 		settings.targetMovement = SDL_static_cast(CaveBotTargetMovement, readNumber(*config, "TargetMovement", settings.targetMovement, CAVEBOT_TARGET_DIAGONAL_DISTANCE_2));
-		settings.revealInvisibleMonsters = readBool(*config, "RevealInvisibleMonsters", settings.revealInvisibleMonsters);
 		settings.lootEnabled = readBool(*config, "LootEnabled", settings.lootEnabled);
 		settings.lootGold = readBool(*config, "LootGold", settings.lootGold);
 		settings.lootAfterKill = readBool(*config, "LootAfterKill", settings.lootAfterKill);
@@ -260,7 +259,6 @@ void CaveBot::saveConfig()
 	config.insertKey("AttackRuneSubtype", numberText(m_settings.attackRuneSubtype));
 	config.insertKey("AttackDelay", numberText(m_settings.attackDelay));
 	config.insertKey("TargetMovement", numberText(m_settings.targetMovement));
-	config.insertKey("RevealInvisibleMonsters", boolText(m_settings.revealInvisibleMonsters));
 	config.insertKey("LootEnabled", boolText(m_settings.lootEnabled));
 	config.insertKey("LootGold", boolText(m_settings.lootGold));
 	config.insertKey("LootAfterKill", boolText(m_settings.lootAfterKill));
@@ -296,19 +294,8 @@ void CaveBot::saveConfig()
 void CaveBot::applySettings(const CaveBotSettings& settings)
 {
 	bool recordChanged = (m_settings.recordEnabled != settings.recordEnabled);
-	bool revealInvisibleChanged = (m_settings.revealInvisibleMonsters != settings.revealInvisibleMonsters);
 	size_t currentWaypoint = m_currentWaypoint;
 	m_settings = settings;
-	Creature::setRevealInvisibleMonsters(m_settings.revealInvisibleMonsters);
-	if(revealInvisibleChanged)
-	{
-		knownCreatures& creatures = g_map.getKnownCreatures();
-		for(knownCreatures::iterator it = creatures.begin(), end = creatures.end(); it != end; ++it)
-		{
-			if(it->second)
-				it->second->refreshInvisibleOutfit();
-		}
-	}
 	m_settings.reachDistance = UTIL_min<Uint8>(5, m_settings.reachDistance);
 	m_settings.retryDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.retryDelay));
 	m_settings.attackDelay = UTIL_max<Uint32>(250, UTIL_min<Uint32>(10000, m_settings.attackDelay));

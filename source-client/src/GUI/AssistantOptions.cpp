@@ -25,6 +25,7 @@
 #define ASSISTANT_ENERGY_RING_ENABLED_EVENTID 1106
 #define ASSISTANT_AMULET_ENABLED_EVENTID 1107
 #define ASSISTANT_AMMUNITION_ENABLED_EVENTID 1108
+#define ASSISTANT_REVEAL_INVISIBLE_EVENTID 1109
 #define ASSISTANT_HEAL_PERCENT_EVENTID 1200
 #define ASSISTANT_HEAL_SPELL_EVENTID 1201
 #define ASSISTANT_HEAL_RUNE_ID_EVENTID 1202
@@ -129,6 +130,7 @@ void assistantOptions_Events(Uint32 event, Sint32)
 			AssistantSettings settings = g_assistant.getSettings();
 			settings.enabled = getChecked(window, ASSISTANT_ENABLED_EVENTID);
 			settings.fullLight = getChecked(window, ASSISTANT_FULL_LIGHT_EVENTID);
+			settings.revealInvisibleMonsters = getChecked(window, ASSISTANT_REVEAL_INVISIBLE_EVENTID);
 			settings.healingEnabled = getChecked(window, ASSISTANT_HEAL_ENABLED_EVENTID);
 			settings.healingUseRune = getChecked(window, ASSISTANT_HEAL_RUNE_EVENTID);
 			settings.healingPercent = SDL_static_cast(Uint8, getNumber(window, ASSISTANT_HEAL_PERCENT_EVENTID, 100));
@@ -178,8 +180,9 @@ void UTIL_assistantOptions()
 	const AssistantSettings& settings = g_assistant.getSettings();
 	GUI_Window* window = new GUI_Window(iRect(0, 0, ASSISTANT_OPTIONS_WIDTH, ASSISTANT_OPTIONS_HEIGHT), "Assistente", GUI_WINDOW_ASSISTANTOPTIONS);
 
-	addCheckBox(window, 18, 30, 200, "Ativar automacoes", settings.enabled, ASSISTANT_ENABLED_EVENTID);
-	addCheckBox(window, 225, 30, 190, "Full light", settings.fullLight, ASSISTANT_FULL_LIGHT_EVENTID);
+	addCheckBox(window, 18, 30, 160, "Ativar automacoes", settings.enabled, ASSISTANT_ENABLED_EVENTID);
+	addCheckBox(window, 185, 30, 95, "Full light", settings.fullLight, ASSISTANT_FULL_LIGHT_EVENTID);
+	addCheckBox(window, 285, 30, 140, "Revelar invisiveis", settings.revealInvisibleMonsters, ASSISTANT_REVEAL_INVISIBLE_EVENTID);
 	window->addChild(new GUI_Separator(iRect(13, 61, ASSISTANT_OPTIONS_WIDTH - 26, 2)));
 
 	addCheckBox(window, 18, 70, 190, "Auto cura", settings.healingEnabled, ASSISTANT_HEAL_ENABLED_EVENTID);
