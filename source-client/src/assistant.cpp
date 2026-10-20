@@ -12,6 +12,7 @@
 #include "map.h"
 #include "creature.h"
 #include "position.h"
+#include "tile.h"
 #include "GUI/GUI_UTIL.h"
 #include "GUI/itemUI.h"
 
@@ -34,6 +35,7 @@ namespace
 	const Uint32 ASSISTANT_EQUIPMENT_RETRY_DELAY = 80;
 	const Uint32 ASSISTANT_EQUIPMENT_CONFIRM_DELAY = 120;
 	const Uint32 ASSISTANT_EQUIPMENT_EMPTY_CONFIRM_DELAY = 40;
+	const Uint32 ASSISTANT_INVISIBLE_RETAIN_TIMEOUT = 10000;
 
 	bool isConfiguredRingId(Uint16 itemId, Uint16 configuredId)
 	{
@@ -298,6 +300,8 @@ void Assistant::applySettings(const AssistantSettings& settings)
 	Creature::setRevealInvisibleMonsters(m_settings.revealInvisibleMonsters);
 	if(revealInvisibleChanged)
 	{
+		if(!m_settings.revealInvisibleMonsters)
+			updateRetainedInvisibleCreatures(SDL_GetTicks(), true);
 		knownCreatures& creatures = g_map.getKnownCreatures();
 		for(knownCreatures::iterator it = creatures.begin(), end = creatures.end(); it != end; ++it)
 		{
@@ -665,6 +669,7 @@ void Assistant::tick()
 	}
 
 	Uint32 now = SDL_GetTicks();
+	updateRetainedInvisibleCreatures(now);
 	if(checkAutoRuneSafety(now))
 		return;
 	if(!m_settings.enabled)
@@ -908,6 +913,35 @@ void Assistant::tick()
 		castSpell(m_settings.hasteSpell);
 		m_nextAction = now + ASSISTANT_ACTION_DELAY;
 		m_nextHaste = now + ASSISTANT_HASTE_DELAY;
+	}
+}
+
+void Assistant::updateRetainedInvisibleCreatures(Uint32 now, bool forceRemove)
+{
+	knownCreatures& creatures = g_map.getKnownCreatures();
+	for(knownCreatures::iterator it = creatures.begin(), end = creatures.end(); it != end; ++it)
+	{
+		Creature* creature = it->second;
+		if(!creature || !creature->isRetainedInvisible())
+			continue;
+
+		Tile* tile = g_map.getTile(creature->getCurrentPosition());
+		if(!forceRemove && creature->getHealth() > 0 &&
+			!SDL_TICKS_PASSED(now, creature->getRetainedInvisibleTime() + ASSISTANT_INVISIBLE_RETAIN_TIMEOUT))
+		{
+			// A full tile refresh clears transient overlay vectors. Reattach the
+			// retained monster every tick so it stays visible and clickable until
+			// the server sends it again (or the safety timeout expires).
+			if(tile)
+				tile->addOverlayCreature(creature);
+			creature->setVisible(true);
+			creature->setNeedUpdate(true);
+			continue;
+		}
+
+		if(tile)
+			tile->removeOverlayCreature(creature);
+		creature->clearRetainedInvisible();
 	}
 }
 

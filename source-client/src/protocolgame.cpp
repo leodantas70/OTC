@@ -67,6 +67,44 @@ static bool shouldUseOldFaster772Handshake()
 	return (Protocol::getProtocolVersion() == 772 && Protocol::getClientVersion() == 772);
 }
 
+static bool shouldRetainInvisibleCreature(Creature* creature, const Position& position)
+{
+	if(!creature || !creature->canRetainInvisibleRemoval())
+		return false;
+
+	const Position& center = g_map.getCentralPosition();
+	if(position.z != center.z)
+		return false;
+
+	const Sint32 distanceX = Position::getDistanceX(position, center);
+	const Sint32 distanceY = Position::getDistanceY(position, center);
+	return (distanceX < MAP_WIDTH_OFFSET - 1 && distanceY < MAP_HEIGHT_OFFSET - 1);
+}
+
+static void prepareRetainedCreatureForAdd(Thing* thing)
+{
+	if(!thing || !thing->isCreature())
+		return;
+
+	Creature* creature = thing->getCreature();
+	if(!creature || !creature->isRetainedInvisible())
+		return;
+
+	Tile* oldTile = g_map.getTile(creature->getCurrentPosition());
+	if(oldTile)
+		oldTile->removeOverlayCreature(creature);
+	creature->clearRetainedInvisible();
+}
+
+static bool retainInvisibleCreature(Tile* tile, Creature* creature)
+{
+	if(!tile || !creature || !tile->removeThing(creature))
+		return false;
+	tile->addOverlayCreature(creature);
+	creature->retainInvisibleRemoval();
+	return true;
+}
+
 static bool addOldFaster772BuildProof(OutputMessage& msg, const Uint32 keys[4])
 {
 	#if defined(_WIN32)
@@ -845,6 +883,7 @@ void ProtocolGame::parseTileAddThing(InputMessage& msg)
 		}
 		return;
 	}
+	prepareRetainedCreatureForAdd(thing);
 
 	if(stackPos == 0xFF)
 	{
@@ -953,7 +992,15 @@ void ProtocolGame::parseTileRemoveThing(InputMessage& msg)
 				g_logger.addLog(LOG_CATEGORY_ERROR, std::string(g_buffer, SDL_static_cast(size_t, len)));
 				return;
 			}
-			if(!tile->removeThing(creature))
+			if(shouldRetainInvisibleCreature(creature, pos))
+			{
+				if(!retainInvisibleCreature(tile, creature))
+				{
+					Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%s(X: %u, Y: %u, Z: %u).", "[ProtocolGame::parseTileRemoveThing] Failed to retain invisible creature", SDL_static_cast(Uint32, pos.x), SDL_static_cast(Uint32, pos.y), SDL_static_cast(Uint32, pos.z));
+					g_logger.addLog(LOG_CATEGORY_ERROR, std::string(g_buffer, SDL_static_cast(size_t, len)));
+				}
+			}
+			else if(!tile->removeThing(creature))
 			{
 				Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%s(X: %u, Y: %u, Z: %u).", "[ProtocolGame::parseTileRemoveThing] Failed to remove creature", SDL_static_cast(Uint32, pos.x), SDL_static_cast(Uint32, pos.y), SDL_static_cast(Uint32, pos.z));
 				g_logger.addLog(LOG_CATEGORY_ERROR, std::string(g_buffer, SDL_static_cast(size_t, len)));
@@ -989,7 +1036,16 @@ void ProtocolGame::parseTileRemoveThing(InputMessage& msg)
 			return;
 		}
 		bool creature = excessThing->isCreature();
-		if(!tile->removeThing(excessThing))
+		Creature* removedCreature = (creature ? excessThing->getCreature() : NULL);
+		if(shouldRetainInvisibleCreature(removedCreature, pos))
+		{
+			if(!retainInvisibleCreature(tile, removedCreature))
+			{
+				Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%s(X: %u, Y: %u, Z: %u, Stack: %u).", "[ProtocolGame::parseTileRemoveThing] Failed to retain invisible creature", SDL_static_cast(Uint32, pos.x), SDL_static_cast(Uint32, pos.y), SDL_static_cast(Uint32, pos.z), stackPos);
+				g_logger.addLog(LOG_CATEGORY_ERROR, std::string(g_buffer, SDL_static_cast(size_t, len)));
+			}
+		}
+		else if(!tile->removeThing(excessThing))
 		{
 			Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%s(X: %u, Y: %u, Z: %u, Stack: %u).", "[ProtocolGame::parseTileRemoveThing] Failed to remove thing", SDL_static_cast(Uint32, pos.x), SDL_static_cast(Uint32, pos.y), SDL_static_cast(Uint32, pos.z), stackPos);
 			g_logger.addLog(LOG_CATEGORY_ERROR, std::string(g_buffer, SDL_static_cast(size_t, len)));
@@ -1075,6 +1131,12 @@ void ProtocolGame::parseTileMoveCreature(InputMessage& msg)
 	}
 	else if(!oldTile || !creature)
 		return;
+	if(creature->isRetainedInvisible())
+	{
+		oldTile->removeOverlayCreature(creature);
+		oldTile->addThing(creature, (g_clientVersion < 853), true);
+		creature->clearRetainedInvisible();
+	}
 
 	creature->move(fromPos, toPos, oldTile, newTile);
 	
@@ -1088,6 +1150,7 @@ void ProtocolGame::parseTileMoveCreature(InputMessage& msg)
 
 void ProtocolGame::parseFloorChangeUp(InputMessage& msg)
 {
+	g_game.blockManualMovementAfterFloorChange();
 	Position pos = g_map.getCentralPosition();
 	--pos.z;
 
@@ -1124,6 +1187,7 @@ void ProtocolGame::parseFloorChangeUp(InputMessage& msg)
 
 void ProtocolGame::parseFloorChangeDown(InputMessage& msg)
 {
+	g_game.blockManualMovementAfterFloorChange();
 	Position pos = g_map.getCentralPosition();
 	++pos.z;
 
@@ -9320,7 +9384,10 @@ Sint32 ProtocolGame::setTileDescription(InputMessage& msg, const Position& posit
 
 		Thing* thing = internalGetThing(msg, position);
 		if(tile)
+		{
+			prepareRetainedCreatureForAdd(thing);
 			tile->addThing(thing);
+		}
 	}
 	updateMinimapTile(position, tile);
 	return 0;

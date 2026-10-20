@@ -56,6 +56,7 @@ void Tile::reset()
 	m_topItems.clear();
 	m_downItems.clear();
 	m_creatures.clear();
+	m_overlayCreatures.clear();
 	m_effects.clear();
 }
 
@@ -108,6 +109,8 @@ void Tile::render(Sint32 posX, Sint32 posY, bool visible_tile)
 		if(!creature->isWalkingCheck())
 			creature->render(posX, posY);
 	}
+	for(std::vector<Creature*>::reverse_iterator it = m_overlayCreatures.rbegin(), end = m_overlayCreatures.rend(); it != end; ++it)
+		(*it)->render(posX, posY);
 
 	for(std::vector<Creature*>::iterator it = m_walkCreatures.begin(), end = m_walkCreatures.end(); it != end; ++it)
 	{
@@ -157,6 +160,8 @@ void Tile::reRenderTile(Sint32 posX, Sint32 posY)
 		if(!creature->isWalkingCheck())
 			creature->render(posX, posY);
 	}
+	for(std::vector<Creature*>::reverse_iterator it = m_overlayCreatures.rbegin(), end = m_overlayCreatures.rend(); it != end; ++it)
+		(*it)->render(posX, posY);
 
 	for(std::vector<Creature*>::iterator it = m_walkCreatures.begin(), end = m_walkCreatures.end(); it != end; ++it)
 	{
@@ -183,6 +188,8 @@ void Tile::renderInformations(Sint32 posX, Sint32 posY, Sint32 drawX, Sint32 dra
 		if(!creature->isWalkingCheck())
 			creature->renderInformations(posX, posY, drawX, drawY, scale, visible);
 	}
+	for(std::vector<Creature*>::reverse_iterator it = m_overlayCreatures.rbegin(), end = m_overlayCreatures.rend(); it != end; ++it)
+		(*it)->renderInformations(posX, posY, drawX, drawY, scale, visible);
 
 	for(std::vector<Creature*>::iterator it = m_walkCreatures.begin(), end = m_walkCreatures.end(); it != end; ++it)
 	{
@@ -293,6 +300,17 @@ Thing* Tile::getThingByStackPos(Uint32 index)
 
 Creature* Tile::getTopCreature(Sint32 x, Sint32 y, iRect& rect, float scale)
 {
+	for(std::vector<Creature*>::reverse_iterator it = m_overlayCreatures.rbegin(), end = m_overlayCreatures.rend(); it != end; ++it)
+	{
+		Creature* creature = (*it);
+		std::pair<Sint32, Sint32> displacement = creature->getDisplacement();
+		Sint32 xOffset = SDL_static_cast(Sint32, scale * displacement.first);
+		Sint32 yOffset = SDL_static_cast(Sint32, scale * displacement.second);
+		iRect irect = iRect(rect.x1 - xOffset, rect.y1 - yOffset, rect.x2, rect.y2);
+		if(irect.isPointInside(x, y))
+			return creature;
+	}
+
 	for(std::vector<Creature*>::reverse_iterator it = m_walkCreatures.rbegin(), end = m_walkCreatures.rend(); it != end; ++it)
 	{
 		Creature* creature = (*it);
@@ -664,6 +682,19 @@ void Tile::removeWalkCreature(Creature* creature)
 	std::vector<Creature*>::iterator it = std::find(m_walkCreatures.begin(), m_walkCreatures.end(), creature);
 	if(it != m_walkCreatures.end())
 		m_walkCreatures.erase(it);
+}
+
+void Tile::addOverlayCreature(Creature* creature)
+{
+	if(creature && std::find(m_overlayCreatures.begin(), m_overlayCreatures.end(), creature) == m_overlayCreatures.end())
+		m_overlayCreatures.push_back(creature);
+}
+
+void Tile::removeOverlayCreature(Creature* creature)
+{
+	std::vector<Creature*>::iterator it = std::find(m_overlayCreatures.begin(), m_overlayCreatures.end(), creature);
+	if(it != m_overlayCreatures.end())
+		m_overlayCreatures.erase(it);
 }
 
 void Tile::addEffect(Effect* effect)

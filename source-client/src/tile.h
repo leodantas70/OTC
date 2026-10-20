@@ -67,6 +67,8 @@ class Tile
 
 		void addWalkCreature(Creature* creature);
 		void removeWalkCreature(Creature* creature);
+		void addOverlayCreature(Creature* creature);
+		void removeOverlayCreature(Creature* creature);
 
 		void addEffect(Effect* effect);
 		void removeMagicEffect(Effect* effect);
@@ -102,6 +104,7 @@ class Tile
 		std::vector<Item*> m_downItems;
 		std::vector<Creature*> m_creatures;
 		std::vector<Creature*> m_walkCreatures;
+		std::vector<Creature*> m_overlayCreatures;
 		std::vector<Effect*> m_effects;
 
 		Position m_position;

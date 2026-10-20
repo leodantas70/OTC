@@ -88,6 +88,7 @@ class Assistant
 		bool hasPlayerWithoutFriendHeartOnScreen() const;
 		bool checkAutoRuneSafety(Uint32 now);
 		bool tickAutoRuneActions(Uint32 now);
+		void updateRetainedInvisibleCreatures(Uint32 now, bool forceRemove = false);
 
 		AssistantSettings m_settings;
 		Uint32 m_nextAction = 0;

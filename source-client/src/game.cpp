@@ -83,6 +83,8 @@ void Game::reset()
 	m_playerMovement = DIRECTION_INVALID;
 	m_playerCurrentDir = DIRECTION_INVALID;
 	m_playerLastDir = DIRECTION_INVALID;
+	m_manualMovementHeld = false;
+	m_floorChangeMovementBlocked = false;
 	for(size_t i = SLOT_HEAD; i < SLOT_LAST; ++i)
 	{
 		if(m_inventoryItem[i])
@@ -1820,6 +1822,10 @@ void Game::checkLocalCreatureMovement()
 
 void Game::checkMovement(Direction dir)
 {
+	m_manualMovementHeld = true;
+	if(m_floorChangeMovementBlocked)
+		return;
+
 	if(m_autoWalkDestination.x != 0xFFFF)
 		stopAutoWalk();
 
@@ -1836,7 +1842,19 @@ void Game::checkMovement(Direction dir)
 
 void Game::releaseMovement()
 {
+	m_manualMovementHeld = false;
+	m_floorChangeMovementBlocked = false;
 	m_playerMovement = DIRECTION_INVALID;
+}
+
+void Game::blockManualMovementAfterFloorChange()
+{
+	if(!m_manualMovementHeld)
+		return;
+
+	m_floorChangeMovementBlocked = true;
+	m_playerMovement = DIRECTION_INVALID;
+	m_playerCurrentDir = DIRECTION_INVALID;
 }
 
 void Game::switchToNextChannel()

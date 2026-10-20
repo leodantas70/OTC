@@ -197,6 +197,7 @@ class Game
 		void checkLocalCreatureMovement();
 		void checkMovement(Direction dir);
 		void releaseMovement();
+		void blockManualMovementAfterFloorChange();
 
 		void switchToNextChannel();
 		void switchToPreviousChannel();
@@ -397,6 +398,8 @@ class Game
 		Uint8 m_playerMovement = DIRECTION_INVALID;
 		Uint8 m_playerCurrentDir = DIRECTION_INVALID;
 		Uint8 m_playerLastDir = DIRECTION_INVALID;
+		bool m_manualMovementHeld = false;
+		bool m_floorChangeMovementBlocked = false;
 
 		bool m_canReportBugs = false;
 		bool m_expertPvpMode = false;

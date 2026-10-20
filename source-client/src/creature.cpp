@@ -946,6 +946,28 @@ void Creature::refreshInvisibleOutfit()
 	refreshOutfitAnimators();
 }
 
+bool Creature::canRetainInvisibleRemoval()
+{
+	return (s_revealInvisibleMonsters && isMonster() && m_health > 0);
+}
+
+void Creature::retainInvisibleRemoval()
+{
+	m_retainedInvisible = true;
+	m_retainedInvisibleTime = SDL_GetTicks();
+	m_outfitInvisible = true;
+	refreshInvisibleOutfit();
+	setVisible(true);
+	setNeedUpdate(true);
+}
+
+void Creature::clearRetainedInvisible()
+{
+	m_retainedInvisible = false;
+	m_retainedInvisibleTime = 0;
+	m_outfitInvisible = false;
+}
+
 void Creature::refreshOutfitAnimators()
 {
 	for(Sint32 i = ThingFrameGroup_Default; i < ThingFrameGroup_Last; ++i)

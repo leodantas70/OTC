@@ -79,6 +79,11 @@ class Creature : public Thing
 		void turnDirection(Direction direction);
 		void setOutfit(Uint16 lookType, Uint16 lookTypeEx, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount);
 		void refreshInvisibleOutfit();
+		bool canRetainInvisibleRemoval();
+		void retainInvisibleRemoval();
+		void clearRetainedInvisible();
+		SDL_INLINE bool isRetainedInvisible() const {return m_retainedInvisible;}
+		SDL_INLINE Uint32 getRetainedInvisibleTime() const {return m_retainedInvisibleTime;}
 		void setSpeed(Uint16 speed);
 		SDL_INLINE void setHelpers(Uint16 helpers) {m_helpers = helpers;}
 		void setSkull(Uint8 skull);
@@ -226,6 +231,8 @@ class Creature : public Thing
 		bool m_isVisible = false;
 		bool m_needUpdate = false;
 		bool m_outfitInvisible = false;
+		bool m_retainedInvisible = false;
+		Uint32 m_retainedInvisibleTime = 0;
 };
 
 #endif /* __FILE_CREATURE_h_ */
