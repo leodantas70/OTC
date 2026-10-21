@@ -93,7 +93,10 @@ static void prepareRetainedCreatureForAdd(Thing* thing)
 	Tile* oldTile = g_map.getTile(creature->getCurrentPosition());
 	if(oldTile)
 		oldTile->removeOverlayCreature(creature);
-	creature->clearRetainedInvisible();
+	// internalGetThing already applied the outfit received from the server.
+	// Clear only the temporary overlay state so an outfit-0 creature remains
+	// marked as invisible and keeps the Demon reveal marker.
+	creature->clearRetainedInvisible(false);
 }
 
 static bool retainInvisibleCreature(Tile* tile, Creature* creature)
@@ -1105,12 +1108,20 @@ void ProtocolGame::parseTileMoveCreature(InputMessage& msg)
 			Thing* thing = oldTile->getThingByStackPos(stackPos);
 			if(!thing || !thing->isCreature())
 			{
-				if(thing)
+				// A 7.x server can keep moving an outfit-0 creature by tile and
+				// stack position. Since a retained invisible monster lives in the
+				// overlay list, recover it here instead of leaving its marker frozen
+				// on the SQM where invisibility started.
+				creature = oldTile->getRetainedOverlayCreature(g_game.getAttackID());
+				if(!creature)
+					creature = oldTile->getRetainedOverlayCreature();
+
+				if(!creature && thing)
 				{
 					Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%s(X: %u, Y: %u, Z: %u, Stack: %u).", "[ProtocolGame::parseTileMoveCreature] Thing is not a valid creature", SDL_static_cast(Uint32, fromPos.x), SDL_static_cast(Uint32, fromPos.y), SDL_static_cast(Uint32, fromPos.z), stackPos);
 					g_logger.addLog(LOG_CATEGORY_ERROR, std::string(g_buffer, SDL_static_cast(size_t, len)));
 				}
-				else
+				else if(!creature)
 				{
 					Sint32 len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%s(X: %u, Y: %u, Z: %u, Stack: %u).", "[ProtocolGame::parseTileMoveCreature] Thing not found", SDL_static_cast(Uint32, fromPos.x), SDL_static_cast(Uint32, fromPos.y), SDL_static_cast(Uint32, fromPos.z), stackPos);
 					g_logger.addLog(LOG_CATEGORY_ERROR, std::string(g_buffer, SDL_static_cast(size_t, len)));
@@ -1135,7 +1146,10 @@ void ProtocolGame::parseTileMoveCreature(InputMessage& msg)
 	{
 		oldTile->removeOverlayCreature(creature);
 		oldTile->addThing(creature, (g_clientVersion < 853), true);
-		creature->clearRetainedInvisible();
+		// Keep the outfit-invisible flag while returning the creature to the
+		// normal tile list. This lets subsequent server movements animate it and
+		// keeps targeting active until a visible outfit is received.
+		creature->clearRetainedInvisible(false);
 	}
 
 	creature->move(fromPos, toPos, oldTile, newTile);

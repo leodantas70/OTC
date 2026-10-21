@@ -82,7 +82,7 @@ class Creature : public Thing
 		bool canRetainInvisibleRemoval();
 		bool isRevealedInvisible();
 		void retainInvisibleRemoval();
-		void clearRetainedInvisible();
+		void clearRetainedInvisible(bool clearInvisibleOutfit = true);
 		SDL_INLINE bool isRetainedInvisible() const {return m_retainedInvisible;}
 		SDL_INLINE Uint32 getRetainedInvisibleTime() const {return m_retainedInvisibleTime;}
 		void setSpeed(Uint16 speed);

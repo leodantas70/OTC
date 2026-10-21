@@ -15,6 +15,7 @@ struct AssistantSettings
 	bool enabled = false;
 	bool fullLight = false;
 	bool revealInvisibleMonsters = false;
+	bool dashEnabled = false;
 	bool healingEnabled = false;
 	bool healingUseRune = false;
 	Uint8 healingPercent = 50;

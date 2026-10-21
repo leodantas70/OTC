@@ -196,6 +196,7 @@ void Assistant::loadCharacterConfig(const std::string& characterName)
 		settings.enabled = readBool(*config, "Enabled", settings.enabled);
 		settings.fullLight = readBool(*config, "FullLight", settings.fullLight);
 		settings.revealInvisibleMonsters = readBool(*config, "RevealInvisibleMonsters", settings.revealInvisibleMonsters);
+		settings.dashEnabled = readBool(*config, "DashEnabled", settings.dashEnabled);
 		settings.healingEnabled = readBool(*config, "HealingEnabled", settings.healingEnabled);
 		settings.healingUseRune = readBool(*config, "HealingUseRune", settings.healingUseRune);
 		settings.healingPercent = SDL_static_cast(Uint8, readNumber(*config, "HealingPercent", settings.healingPercent, 100));
@@ -252,6 +253,7 @@ void Assistant::saveConfig()
 	config.insertKey("Enabled", boolText(m_settings.enabled));
 	config.insertKey("FullLight", boolText(m_settings.fullLight));
 	config.insertKey("RevealInvisibleMonsters", boolText(m_settings.revealInvisibleMonsters));
+	config.insertKey("DashEnabled", boolText(m_settings.dashEnabled));
 	config.insertKey("HealingEnabled", boolText(m_settings.healingEnabled));
 	config.insertKey("HealingUseRune", boolText(m_settings.healingUseRune));
 	config.insertKey("HealingPercent", numberText(m_settings.healingPercent));
@@ -300,6 +302,7 @@ void Assistant::applySettings(const AssistantSettings& settings)
 		g_game.cancelInvisibleAttack();
 	m_settings = settings;
 	Creature::setRevealInvisibleMonsters(m_settings.revealInvisibleMonsters);
+	g_game.setDashEnabled(m_settings.dashEnabled);
 	if(revealInvisibleChanged)
 	{
 		if(!m_settings.revealInvisibleMonsters)

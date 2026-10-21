@@ -200,6 +200,7 @@ class Game
 		void checkMovement(Direction dir);
 		void releaseMovement();
 		void blockManualMovementAfterFloorChange();
+		void setDashEnabled(bool enabled);
 
 		void switchToNextChannel();
 		void switchToPreviousChannel();
@@ -378,6 +379,7 @@ class Game
 		Position m_autoWalkDestination;
 		Position m_limitWalkDestination;
 		Position m_lastCancelWalkPos;
+		Position m_dashQueuedOrigin;
 
 		Uint16 m_playerLevel = 1;
 		Uint16 m_playerMagicLevel = 0;
@@ -411,6 +413,8 @@ class Game
 		Uint8 m_playerLastDir = DIRECTION_INVALID;
 		bool m_manualMovementHeld = false;
 		bool m_floorChangeMovementBlocked = false;
+		bool m_dashEnabled = false;
+		Uint32 m_nextDashWalk = 0;
 
 		bool m_canReportBugs = false;
 		bool m_expertPvpMode = false;

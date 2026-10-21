@@ -69,6 +69,7 @@ class Tile
 		void removeWalkCreature(Creature* creature);
 		void addOverlayCreature(Creature* creature);
 		void removeOverlayCreature(Creature* creature);
+		Creature* getRetainedOverlayCreature(Uint32 preferredId = 0);
 
 		void addEffect(Effect* effect);
 		void removeMagicEffect(Effect* effect);

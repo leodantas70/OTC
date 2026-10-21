@@ -31,6 +31,8 @@ double Creature::speedB = 261.29;
 double Creature::speedC = -4795.01;
 bool Creature::s_revealInvisibleMonsters = false;
 
+static const Uint16 REVEALED_INVISIBLE_DEMON_LOOKTYPE = 35;
+
 extern Engine g_engine;
 extern Map g_map;
 extern ThingManager g_thingManager;
@@ -883,12 +885,15 @@ void Creature::setOutfit(Uint16 lookType, Uint16 lookTypeEx, Uint8 lookHead, Uin
 {
 	const bool invisible = (lookType == 0 && lookTypeEx == 0);
 	m_outfitInvisible = invisible;
-	if(invisible && s_revealInvisibleMonsters && isMonster() && m_lastVisibleThingType)
+	if(invisible && s_revealInvisibleMonsters && isMonster())
 	{
-		m_thingType = m_lastVisibleThingType;
-		m_mountType = m_lastVisibleMountType;
-		m_outfit = m_lastVisibleOutfit;
-		m_lookAddons = m_lastVisibleLookAddons;
+		// Old Tibia clients receive invisible creatures with outfit 0. Display a
+		// fixed Demon marker instead, while preserving the creature id and all
+		// server-provided movement/target information.
+		m_thingType = g_thingManager.getThingType(ThingCategory_Creature, REVEALED_INVISIBLE_DEMON_LOOKTYPE);
+		m_mountType = NULL;
+		m_outfit = 0;
+		m_lookAddons = 0;
 		refreshOutfitAnimators();
 		return;
 	}
@@ -931,12 +936,12 @@ void Creature::refreshInvisibleOutfit()
 	if(!m_outfitInvisible)
 		return;
 
-	if(s_revealInvisibleMonsters && isMonster() && m_lastVisibleThingType)
+	if(s_revealInvisibleMonsters && isMonster())
 	{
-		m_thingType = m_lastVisibleThingType;
-		m_mountType = m_lastVisibleMountType;
-		m_outfit = m_lastVisibleOutfit;
-		m_lookAddons = m_lastVisibleLookAddons;
+		m_thingType = g_thingManager.getThingType(ThingCategory_Creature, REVEALED_INVISIBLE_DEMON_LOOKTYPE);
+		m_mountType = NULL;
+		m_outfit = 0;
+		m_lookAddons = 0;
 	}
 	else
 	{
@@ -966,11 +971,12 @@ void Creature::retainInvisibleRemoval()
 	setNeedUpdate(true);
 }
 
-void Creature::clearRetainedInvisible()
+void Creature::clearRetainedInvisible(bool clearInvisibleOutfit)
 {
 	m_retainedInvisible = false;
 	m_retainedInvisibleTime = 0;
-	m_outfitInvisible = false;
+	if(clearInvisibleOutfit)
+		m_outfitInvisible = false;
 }
 
 void Creature::refreshOutfitAnimators()

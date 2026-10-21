@@ -697,6 +697,17 @@ void Tile::removeOverlayCreature(Creature* creature)
 		m_overlayCreatures.erase(it);
 }
 
+Creature* Tile::getRetainedOverlayCreature(Uint32 preferredId)
+{
+	for(std::vector<Creature*>::reverse_iterator it = m_overlayCreatures.rbegin(), end = m_overlayCreatures.rend(); it != end; ++it)
+	{
+		Creature* creature = (*it);
+		if(creature && creature->isRetainedInvisible() && (preferredId == 0 || creature->getId() == preferredId))
+			return creature;
+	}
+	return NULL;
+}
+
 void Tile::addEffect(Effect* effect)
 {
 	if(effect->isTopEffect())

@@ -54,7 +54,7 @@ static bool isLootTextMessage(const std::string& text)
 		SDL_strncasecmp(text.c_str() + begin, prefix, sizeof(prefix) - 1) == 0);
 }
 
-Game::Game() : m_autoWalkDestination(0xFFFF, 0xFFFF, 0xFF), m_limitWalkDestination(0xFFFF, 0xFFFF, 0xFF), m_lastCancelWalkPos(0xFFFF, 0xFFFF, 0xFF)
+Game::Game() : m_autoWalkDestination(0xFFFF, 0xFFFF, 0xFF), m_limitWalkDestination(0xFFFF, 0xFFFF, 0xFF), m_lastCancelWalkPos(0xFFFF, 0xFFFF, 0xFF), m_dashQueuedOrigin(0xFFFF, 0xFFFF, 0xFF)
 {
 	for(Uint8 skill = 0; skill < Skills_LastAdditionalSkill; ++skill)
 	{
@@ -90,6 +90,8 @@ void Game::reset()
 	m_playerLastDir = DIRECTION_INVALID;
 	m_manualMovementHeld = false;
 	m_floorChangeMovementBlocked = false;
+	m_dashQueuedOrigin = Position(0xFFFF, 0xFFFF, 0xFF);
+	m_nextDashWalk = 0;
 	for(size_t i = SLOT_HEAD; i < SLOT_LAST; ++i)
 	{
 		if(m_inventoryItem[i])
@@ -1937,6 +1939,23 @@ void Game::checkMovement(Direction dir)
 		sendAttackModes();
 	}
 
+	Creature* player = g_map.getLocalCreature();
+	if(m_dashEnabled && player && player->getSpeed() != 0 &&
+		(player->isPreWalking() || player->isWalking()))
+	{
+		Uint32 now = SDL_GetTicks();
+		const Position& origin = player->getCurrentPosition();
+		if(origin != m_dashQueuedOrigin && SDL_TICKS_PASSED(now, m_nextDashWalk))
+		{
+			// Queue only one extra step for each position acknowledged by the
+			// server. This removes the client-side pause without changing the
+			// speed or step duration imposed by the server.
+			sendWalk(dir);
+			m_dashQueuedOrigin = origin;
+			m_nextDashWalk = now + 50;
+		}
+	}
+
 	m_playerCurrentDir = dir;
 	m_playerMovement = dir;
 	checkLocalCreatureMovement();
@@ -1947,6 +1966,13 @@ void Game::releaseMovement()
 	m_manualMovementHeld = false;
 	m_floorChangeMovementBlocked = false;
 	m_playerMovement = DIRECTION_INVALID;
+}
+
+void Game::setDashEnabled(bool enabled)
+{
+	m_dashEnabled = enabled;
+	m_dashQueuedOrigin = Position(0xFFFF, 0xFFFF, 0xFF);
+	m_nextDashWalk = 0;
 }
 
 void Game::blockManualMovementAfterFloorChange()
