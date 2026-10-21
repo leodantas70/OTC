@@ -1759,6 +1759,10 @@ void ProtocolGame::parseDistanceEffect(InputMessage& msg)
 	else
 		type = SDL_static_cast(Uint16, msg.getU8());
 
+	// For old-protocol invisible monsters, the projectile source may be the
+	// only exact position still sent by the server.
+	g_game.trackInvisibleProjectileSource(fromPos, toPos);
+
 	g_map.checkDistanceEffects();
 	DistanceEffect* distanceEffect = DistanceEffect::createDistanceEffect(fromPos, toPos, 0, type);
 	if(distanceEffect)

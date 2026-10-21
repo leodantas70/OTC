@@ -755,6 +755,48 @@ void Game::cancelInvisibleAttack()
 		sendAttackPacket(NULL);
 }
 
+void Game::trackInvisibleProjectileSource(const Position& fromPos, const Position& toPos)
+{
+	if(m_invisibleAttackId == 0 || fromPos == toPos)
+		return;
+
+	Creature* target = g_map.getCreatureById(m_invisibleAttackId);
+	Creature* local = g_map.getLocalCreature();
+	if(!target || !local || !target->isRetainedInvisible())
+		return;
+
+	const Position& localPos = local->getCurrentPosition();
+	if(fromPos.z != localPos.z || toPos.z != localPos.z ||
+		!Position::areInRange<1, 1, 0>(toPos, localPos))
+		return;
+
+	Position oldPos = target->getCurrentPosition();
+	if(oldPos == fromPos)
+	{
+		target->retainInvisibleRemoval();
+		m_invisibleAttackDeadline = SDL_GetTicks() + INVISIBLE_ATTACK_TIMEOUT;
+		return;
+	}
+
+	Tile* newTile = g_map.getTile(fromPos);
+	if(!newTile)
+		return;
+
+	Tile* oldTile = g_map.getTile(oldPos);
+	if(oldTile)
+		oldTile->removeOverlayCreature(target);
+
+	// The server hides normal step packets for this creature, but a distance
+	// effect still carries its exact source position. Move only the currently
+	// attacked retained monster, and only when the projectile ends on the local
+	// player, so unrelated map effects do not drag the Demon marker around.
+	Position confirmedPos = fromPos;
+	target->setCurrentPosition(confirmedPos);
+	newTile->addOverlayCreature(target);
+	target->retainInvisibleRemoval();
+	m_invisibleAttackDeadline = SDL_GetTicks() + INVISIBLE_ATTACK_TIMEOUT;
+}
+
 void Game::processSpellDelay(Uint8 spellId, Uint32 delay)
 {
 	(void)spellId;

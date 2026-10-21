@@ -108,6 +108,7 @@ class Game
 		void processWalkWait(Uint16 walkTime);
 		void tickInvisibleAttack(Uint32 now);
 		void cancelInvisibleAttack();
+		void trackInvisibleProjectileSource(const Position& fromPos, const Position& toPos);
 		void processOutfits(Uint16 lookType, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount, std::vector<OutfitDetail>& outfits, std::vector<MountDetail>& mounts);
 		void processTutorialHint(Uint8 tutorialId);
 		void processCancelTarget(Uint32 sequence);
