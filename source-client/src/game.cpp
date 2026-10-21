@@ -40,6 +40,10 @@ extern Automap g_automap;
 extern Connection* g_connection;
 extern Uint32 g_frameTime;
 
+static const Uint32 INVISIBLE_ATTACK_RETRY_DELAY = 250;
+static const Uint32 INVISIBLE_ATTACK_TIMEOUT = 10000;
+static const Uint8 INVISIBLE_ATTACK_MAX_RETRIES = 40;
+
 static bool isLootTextMessage(const std::string& text)
 {
 	size_t begin = text.find_first_not_of(" \t\r\n");
@@ -72,6 +76,7 @@ void Game::reset()
 	m_lastCancelWalkPos = Position(0xFFFF, 0xFFFF, 0xFF);
 	m_cancelWalkCounter = 0;
 	m_autoWalkDirections.clear();
+	clearInvisibleAttackRetry();
 
 	m_playerBaseXpGain = 100;
 	m_playerTournamentFactor = 0;
@@ -682,9 +687,70 @@ void Game::processCancelTarget(Uint32 sequence)
 {
 	if(sequence == 0 || sequence == m_sequence)
 	{
+		Creature* target = (m_invisibleAttackId != 0 ? g_map.getCreatureById(m_invisibleAttackId) : NULL);
+		Uint32 now = SDL_GetTicks();
+		if(target && target->isRevealedInvisible() && target->getHealth() > 0 &&
+			!SDL_TICKS_PASSED(now, m_invisibleAttackDeadline) &&
+			m_invisibleAttackRetries < INVISIBLE_ATTACK_MAX_RETRIES)
+		{
+			m_attackId = m_invisibleAttackId;
+			m_followId = 0;
+			m_invisibleAttackPending = true;
+			Uint32 earliestRetry = m_invisibleAttackLastSent + INVISIBLE_ATTACK_RETRY_DELAY;
+			m_nextInvisibleAttack = (SDL_TICKS_PASSED(now, earliestRetry) ? now : earliestRetry);
+			return;
+		}
+
+		clearInvisibleAttackRetry();
 		m_attackId = 0;
 		m_followId = 0;
 	}
+}
+
+void Game::tickInvisibleAttack(Uint32 now)
+{
+	if(m_invisibleAttackId == 0)
+		return;
+
+	Creature* target = g_map.getCreatureById(m_invisibleAttackId);
+	bool expired = SDL_TICKS_PASSED(now, m_invisibleAttackDeadline);
+	bool exhausted = (m_invisibleAttackRetries >= INVISIBLE_ATTACK_MAX_RETRIES);
+	bool wrongFloor = (target && target->getCurrentPosition().z != g_map.getCentralPosition().z);
+	if(!g_engine.isIngame() || !target || target->getHealth() == 0 || wrongFloor || expired || exhausted)
+	{
+		if(m_attackId == m_invisibleAttackId)
+			m_attackId = 0;
+		clearInvisibleAttackRetry();
+		return;
+	}
+
+	if(!target->isRevealedInvisible())
+	{
+		// The server discarded the hidden target. Reapply it once when the
+		// creature becomes visible, then return to normal targeting behavior.
+		sendAttackPacket(target);
+		clearInvisibleAttackRetry();
+		return;
+	}
+
+	if(!m_invisibleAttackPending || !SDL_TICKS_PASSED(now, m_nextInvisibleAttack))
+		return;
+
+	m_invisibleAttackPending = false;
+	++m_invisibleAttackRetries;
+	sendAttackPacket(target);
+	m_nextInvisibleAttack = now + INVISIBLE_ATTACK_RETRY_DELAY;
+}
+
+void Game::cancelInvisibleAttack()
+{
+	if(m_invisibleAttackId == 0)
+		return;
+
+	bool wasCurrentTarget = (m_attackId == m_invisibleAttackId);
+	clearInvisibleAttackRetry();
+	if(wasCurrentTarget)
+		sendAttackPacket(NULL);
 }
 
 void Game::processSpellDelay(Uint8 spellId, Uint32 delay)
@@ -1068,6 +1134,28 @@ void Game::sendAttackModes()
 
 void Game::sendAttack(Creature* creature)
 {
+	Uint32 now = SDL_GetTicks();
+	if(creature && creature->isRevealedInvisible())
+	{
+		if(m_invisibleAttackId != creature->getId())
+		{
+			m_invisibleAttackId = creature->getId();
+			m_invisibleAttackDeadline = (creature->isRetainedInvisible() ?
+				creature->getRetainedInvisibleTime() + INVISIBLE_ATTACK_TIMEOUT :
+				now + INVISIBLE_ATTACK_TIMEOUT);
+			m_invisibleAttackRetries = 0;
+		}
+		m_invisibleAttackPending = false;
+		m_nextInvisibleAttack = now + INVISIBLE_ATTACK_RETRY_DELAY;
+	}
+	else
+		clearInvisibleAttackRetry();
+
+	sendAttackPacket(creature);
+}
+
+void Game::sendAttackPacket(Creature* creature)
+{
 	Uint32 sequence = m_sequence;
 	m_attackId = (creature ? creature->getId() : 0);
 	if(g_clientVersion >= 963)
@@ -1084,13 +1172,26 @@ void Game::sendAttack(Creature* creature)
 				game->sendFollow(0, sequence);
 
 			game->sendAttack(m_attackId, m_sequence);
+			if(m_attackId != 0 && m_attackId == m_invisibleAttackId)
+				m_invisibleAttackLastSent = SDL_GetTicks();
 		}
 	}
 	m_followId = 0;
 }
 
+void Game::clearInvisibleAttackRetry()
+{
+	m_invisibleAttackId = 0;
+	m_invisibleAttackDeadline = 0;
+	m_nextInvisibleAttack = 0;
+	m_invisibleAttackLastSent = 0;
+	m_invisibleAttackRetries = 0;
+	m_invisibleAttackPending = false;
+}
+
 void Game::sendFollow(Creature* creature)
 {
+	clearInvisibleAttackRetry();
 	Uint32 sequence = m_sequence;
 	m_followId = (creature ? creature->getId() : 0);
 	if(g_clientVersion >= 963)
@@ -1114,6 +1215,7 @@ void Game::sendFollow(Creature* creature)
 
 void Game::sendCancelAttackAndFollow()
 {
+	clearInvisibleAttackRetry();
 	if(g_engine.isIngame())
 	{
 		ProtocolGame* game = GET_SAFE_PROTOCOLGAME;

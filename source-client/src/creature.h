@@ -80,6 +80,7 @@ class Creature : public Thing
 		void setOutfit(Uint16 lookType, Uint16 lookTypeEx, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount);
 		void refreshInvisibleOutfit();
 		bool canRetainInvisibleRemoval();
+		bool isRevealedInvisible();
 		void retainInvisibleRemoval();
 		void clearRetainedInvisible();
 		SDL_INLINE bool isRetainedInvisible() const {return m_retainedInvisible;}

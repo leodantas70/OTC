@@ -642,6 +642,7 @@ int main(int argc, char* argv[])
 			g_http.updateHttp();
 			if(g_connection)
 				g_connection->updateConnection();
+			g_game.tickInvisibleAttack(g_frameTime);
 			g_assistant.tick();
 			g_caveBot.tick();
 

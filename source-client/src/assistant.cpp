@@ -296,6 +296,8 @@ void Assistant::applySettings(const AssistantSettings& settings)
 {
 	bool oldFullLight = m_settings.fullLight;
 	bool revealInvisibleChanged = (m_settings.revealInvisibleMonsters != settings.revealInvisibleMonsters);
+	if(revealInvisibleChanged && !settings.revealInvisibleMonsters)
+		g_game.cancelInvisibleAttack();
 	m_settings = settings;
 	Creature::setRevealInvisibleMonsters(m_settings.revealInvisibleMonsters);
 	if(revealInvisibleChanged)

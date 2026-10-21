@@ -106,6 +106,8 @@ class Game
 		void processTextMessage(MessageMode mode, const std::string& text, Uint32 channelId = 0);
 		void processWalkCancel(Direction direction);
 		void processWalkWait(Uint16 walkTime);
+		void tickInvisibleAttack(Uint32 now);
+		void cancelInvisibleAttack();
 		void processOutfits(Uint16 lookType, Uint8 lookHead, Uint8 lookBody, Uint8 lookLegs, Uint8 lookFeet, Uint8 lookAddons, Uint16 lookMount, std::vector<OutfitDetail>& outfits, std::vector<MountDetail>& mounts);
 		void processTutorialHint(Uint8 tutorialId);
 		void processCancelTarget(Uint32 sequence);
@@ -332,6 +334,9 @@ class Game
 		SDL_INLINE Sint32 getCharmPoints() {return m_playerCharmPoints;}
 		
 	protected:
+		void sendAttackPacket(Creature* creature);
+		void clearInvisibleAttackRetry();
+
 		std::bitset<GAME_FEATURE_LAST> m_gameFeatures;
 		std::vector<Direction> m_autoWalkDirections;
 		bool m_autoWalkAvoidFloorChanges = false;
@@ -360,6 +365,12 @@ class Game
 		Uint32 m_playerMaxMana = 0;
 		Uint32 m_icons = 0;
 		Uint32 m_cancelWalkCounter = 0;
+		Uint32 m_invisibleAttackId = 0;
+		Uint32 m_invisibleAttackDeadline = 0;
+		Uint32 m_nextInvisibleAttack = 0;
+		Uint32 m_invisibleAttackLastSent = 0;
+		Uint8 m_invisibleAttackRetries = 0;
+		bool m_invisibleAttackPending = false;
 
 		Sint32 m_playerTournamentFactor = 0;
 		Sint32 m_playerCharmPoints = 0;

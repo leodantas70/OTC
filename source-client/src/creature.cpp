@@ -951,6 +951,11 @@ bool Creature::canRetainInvisibleRemoval()
 	return (s_revealInvisibleMonsters && isMonster() && m_health > 0);
 }
 
+bool Creature::isRevealedInvisible()
+{
+	return (s_revealInvisibleMonsters && isMonster() && m_health > 0 && (m_outfitInvisible || m_retainedInvisible));
+}
+
 void Creature::retainInvisibleRemoval()
 {
 	m_retainedInvisible = true;
