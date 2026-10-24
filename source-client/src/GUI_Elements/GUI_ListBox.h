@@ -24,6 +24,10 @@
 
 #include "GUI_ScrollBar.h"
 
+#include <memory>
+
+class ItemUI;
+
 class GUI_ListBox : public GUI_Element
 {
 	public:
@@ -45,8 +49,11 @@ class GUI_ListBox : public GUI_Element
 		void setSelect(Sint32 select);
 
 		void add(const std::string data);
+		void addItem(const std::string data, Uint16 itemId);
+		void addCreature(const std::string data, Uint16 lookType, Uint32 outfitColor = 0);
 		void set(Sint32 select, const std::string data);
 		void erase(Sint32 select);
+		void clear();
 
 		void onKeyDown(SDL_Event& event);
 		void onLMouseDown(Sint32 x, Sint32 y);
@@ -58,10 +65,15 @@ class GUI_ListBox : public GUI_Element
 	protected:
 		void (*m_eventHandlerFunction)(Uint32, Sint32) = NULL;
 		std::vector<std::string> m_listBox;
+		std::vector<Uint8> m_iconTypes;
+		std::vector<Uint16> m_iconIds;
+		std::vector<Uint32> m_iconColors;
+		std::vector<std::unique_ptr<ItemUI>> m_itemIcons;
 		GUI_VScrollBar m_scrollBar;
 		Uint32 m_evtParam = 0;
 		Uint32 m_lastClick = 0;
 		Sint32 m_maxDisplay = 0;
+		Sint32 m_rowHeight = 12;
 		Sint32 m_select = -1;
 		bool m_doubleClicked = false;
 };

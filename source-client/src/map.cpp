@@ -1274,8 +1274,20 @@ void Map::removeCreatureById(Uint32 creatureId)
 	knownCreatures::iterator it = m_knownCreatures.find(creatureId);
 	if(it != m_knownCreatures.end())
 	{
-		UTIL_removeBattleCreature(SDL_reinterpret_cast(void*, it->second));
-		delete it->second;
+		Creature* creature = it->second;
+		creature->removeFromDrawnTile();
+
+		// Invisible monsters retained as overlays are not part of the regular
+		// tile stack. The server may reuse a known-creature slot and delete the
+		// object while an overlay still points to it, causing a crash on render.
+		Tile* tile = getTile(creature->getCurrentPosition());
+		if(tile)
+			tile->removeCreatureReferences(creature);
+
+		if(m_localCreature == creature)
+			m_localCreature = NULL;
+		UTIL_removeBattleCreature(SDL_reinterpret_cast(void*, creature));
+		delete creature;
 		m_knownCreatures.erase(it);
 	}
 }

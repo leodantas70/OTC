@@ -469,9 +469,9 @@ static void saveEditedHotkeys(GUI_Window* window)
 			g_engine.bindHotkeyAction(classicHotkeySlots[i].keycode, classicHotkeySlots[i].modifiers, "", false);
 	}
 
-	// Persist custom slots immediately. Empty slots have no action payload,
-	// so saveCFG also writes their key separately as HotkeySlot.
-	g_engine.saveCFG();
+	// Hotkeys live in a dedicated file so another open client cannot replace
+	// them with an older in-memory copy when it closes.
+	g_engine.saveHotkeys();
 }
 
 static void openHotkeyCaptureWindow()
@@ -534,6 +534,10 @@ static void addCapturedHotkeyToEditor(SDL_Keycode keycode, Uint16 modifiers)
 		classicHotkeySlots[slot].keycode = keycode;
 		classicHotkeySlots[slot].modifiers = modifiers;
 		g_classicHotkeyEditStates[slot] = ClassicHotkeyEditState();
+		// Persist the slot as soon as it is created. Its action can be filled in
+		// afterwards without risking the key disappearing if this window closes.
+		g_engine.bindHotkeyAction(keycode, modifiers, "", false);
+		g_engine.saveHotkeys();
 		if(listBox)
 			listBox->add(getHotkeyListText(SDL_static_cast(size_t, slot)));
 	}
@@ -725,6 +729,10 @@ void hotkey_Events(Uint32 event, Sint32 status)
 				GUI_TextBox* textBox = getHotkeyTextBox(pWindow);
 				if(textBox)
 					textBox->setText("");
+				const ClassicHotkeySlot& slot = classicHotkeySlots[g_selectedClassicHotkey];
+				const ClassicHotkeyEditState& state = g_classicHotkeyEditStates[g_selectedClassicHotkey];
+				g_engine.bindHotkeyItem(slot.keycode, slot.modifiers, state.itemId, state.itemSubtype, state.itemUsageType);
+				g_engine.saveHotkeys();
 				refreshHotkeyList(pWindow);
 			}
 		}

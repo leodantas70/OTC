@@ -697,6 +697,19 @@ void Tile::removeOverlayCreature(Creature* creature)
 		m_overlayCreatures.erase(it);
 }
 
+void Tile::removeCreatureReferences(Creature* creature)
+{
+	if(!creature)
+		return;
+
+	// A retained invisible creature can outlive its regular tile entry. When
+	// the server evicts its id from the known-creature cache, make sure no tile
+	// keeps a pointer to the object that is about to be deleted.
+	m_creatures.erase(std::remove(m_creatures.begin(), m_creatures.end(), creature), m_creatures.end());
+	m_walkCreatures.erase(std::remove(m_walkCreatures.begin(), m_walkCreatures.end(), creature), m_walkCreatures.end());
+	m_overlayCreatures.erase(std::remove(m_overlayCreatures.begin(), m_overlayCreatures.end(), creature), m_overlayCreatures.end());
+}
+
 Creature* Tile::getRetainedOverlayCreature(Uint32 preferredId)
 {
 	for(std::vector<Creature*>::reverse_iterator it = m_overlayCreatures.rbegin(), end = m_overlayCreatures.rend(); it != end; ++it)

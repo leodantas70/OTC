@@ -38,6 +38,7 @@
 #define CAVEBOT_REMOVE_EVENTID 1011
 #define CAVEBOT_CLEAR_EVENTID 1012
 #define CAVEBOT_LOOT_ITEM_LIST_EVENTID 1013
+#define CAVEBOT_TARGET_LIST_EVENTID 1014
 
 #define CAVEBOT_ENABLED_EVENTID 1100
 #define CAVEBOT_ROUTE_ENABLED_EVENTID 1101
@@ -72,16 +73,28 @@
 #define CAVEBOT_WAYPOINT_LIST_EVENTID 1300
 #define CAVEBOT_TARGET_MOVEMENT_LIST_EVENTID 1301
 
-#define CAVEBOT_LOOT_CATALOG_LIST_EVENTID 1400
+#define CAVEBOT_LOOT_CATALOG_AVAILABLE_EVENTID 1400
 #define CAVEBOT_LOOT_CATALOG_ADD_EVENTID 1401
 #define CAVEBOT_LOOT_CATALOG_CLOSE_EVENTID 1402
-#define CAVEBOT_LOOT_CATALOG_SEARCH_EVENTID 1403
-#define CAVEBOT_LOOT_CATALOG_FIND_EVENTID 1404
-#define CAVEBOT_LOOT_CATALOG_PREVIEW_EVENTID 1405
-#define CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID 1406
+#define CAVEBOT_LOOT_CATALOG_AVAILABLE_SEARCH_EVENTID 1403
+#define CAVEBOT_LOOT_CATALOG_SELECTED_SEARCH_EVENTID 1404
+#define CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID 1405
+#define CAVEBOT_LOOT_CATALOG_REMOVE_EVENTID 1406
+#define CAVEBOT_LOOT_CATALOG_AVAILABLE_COUNT_EVENTID 1407
+#define CAVEBOT_LOOT_CATALOG_SELECTED_COUNT_EVENTID 1408
 
-#define CAVEBOT_LOOT_CATALOG_WIDTH 420
-#define CAVEBOT_LOOT_CATALOG_HEIGHT 455
+#define CAVEBOT_TARGET_CATALOG_AVAILABLE_EVENTID 1500
+#define CAVEBOT_TARGET_CATALOG_SELECTED_EVENTID 1501
+#define CAVEBOT_TARGET_CATALOG_ADD_EVENTID 1502
+#define CAVEBOT_TARGET_CATALOG_REMOVE_EVENTID 1503
+#define CAVEBOT_TARGET_CATALOG_CLOSE_EVENTID 1504
+#define CAVEBOT_TARGET_CATALOG_AVAILABLE_SEARCH_EVENTID 1505
+#define CAVEBOT_TARGET_CATALOG_SELECTED_SEARCH_EVENTID 1506
+#define CAVEBOT_TARGET_CATALOG_AVAILABLE_COUNT_EVENTID 1507
+#define CAVEBOT_TARGET_CATALOG_SELECTED_COUNT_EVENTID 1508
+
+#define CAVEBOT_CATALOG_WIDTH 760
+#define CAVEBOT_CATALOG_HEIGHT 510
 
 extern Engine g_engine;
 extern Game g_game;
@@ -91,14 +104,34 @@ extern std::string g_basePath;
 
 void caveBotOptions_Events(Uint32 event, Sint32 status);
 void caveBotLootItems_Events(Uint32 event, Sint32 status);
+void caveBotTargets_Events(Uint32 event, Sint32 status);
 
 namespace
 {
-	std::vector<Uint16> g_lootCatalogItemIds;
 	std::vector<Uint16> g_lootCatalogAllItemIds;
 	std::unordered_map<Uint16, std::string> g_lootCatalogNames;
-	Sint32 g_lootCatalogSelection = 0;
+	std::vector<Uint16> g_lootCatalogAvailableIds;
+	std::vector<Uint16> g_lootCatalogSelectedIds;
+	std::vector<Uint16> g_lootCatalogVisibleSelectedIds;
+	Sint32 g_lootCatalogAvailableSelection = -1;
+	Sint32 g_lootCatalogSelectedSelection = -1;
 	bool g_lootCatalogLoaded = false;
+
+	struct CaveBotMonsterCatalogEntry
+	{
+		std::string name;
+		std::string key;
+		Uint16 lookType = 0;
+		Uint32 outfitColor = 0;
+	};
+
+	std::vector<CaveBotMonsterCatalogEntry> g_monsterCatalog;
+	std::vector<size_t> g_monsterCatalogAvailable;
+	std::vector<size_t> g_monsterCatalogVisibleSelected;
+	std::vector<std::string> g_monsterCatalogSelected;
+	Sint32 g_monsterCatalogAvailableSelection = -1;
+	Sint32 g_monsterCatalogSelectedSelection = -1;
+	bool g_monsterCatalogLoaded = false;
 	std::string lowerText(std::string text);
 	const CaveBotTargetMovement g_targetMovementModes[] = {
 		CAVEBOT_TARGET_STAND,
@@ -120,38 +153,6 @@ namespace
 		}
 		return 0;
 	}
-
-	class GUI_CaveBotLootPreview : public GUI_Element
-	{
-		public:
-			GUI_CaveBotLootPreview(iRect boxRect, Uint32 internalID = 0)
-			{
-				setRect(boxRect);
-				m_internalID = internalID;
-			}
-
-			void setItem(Uint16 itemId)
-			{
-				m_item.reset();
-				if(itemId != 0)
-					m_item.reset(ItemUI::createItemUI(itemId, 1));
-			}
-
-			void render()
-			{
-				auto& renderer = g_engine.getRender();
-				renderer->drawPictureRepeat(GUI_UI_IMAGE, GUI_UI_ICON_HORIZONTAL_LINE_DARK_X, GUI_UI_ICON_HORIZONTAL_LINE_DARK_Y, GUI_UI_ICON_HORIZONTAL_LINE_DARK_W, GUI_UI_ICON_HORIZONTAL_LINE_DARK_H, m_tRect.x1, m_tRect.y1, m_tRect.x2, 1);
-				renderer->drawPictureRepeat(GUI_UI_IMAGE, GUI_UI_ICON_VERTICAL_LINE_DARK_X, GUI_UI_ICON_VERTICAL_LINE_DARK_Y, GUI_UI_ICON_VERTICAL_LINE_DARK_W, GUI_UI_ICON_VERTICAL_LINE_DARK_H, m_tRect.x1, m_tRect.y1 + 1, 1, m_tRect.y2 - 1);
-				renderer->drawPictureRepeat(GUI_UI_IMAGE, GUI_UI_ICON_HORIZONTAL_LINE_BRIGHT_X, GUI_UI_ICON_HORIZONTAL_LINE_BRIGHT_Y, GUI_UI_ICON_HORIZONTAL_LINE_BRIGHT_W, GUI_UI_ICON_HORIZONTAL_LINE_BRIGHT_H, m_tRect.x1 + 1, m_tRect.y1 + m_tRect.y2 - 1, m_tRect.x2 - 1, 1);
-				renderer->drawPictureRepeat(GUI_UI_IMAGE, GUI_UI_ICON_VERTICAL_LINE_BRIGHT_X, GUI_UI_ICON_VERTICAL_LINE_BRIGHT_Y, GUI_UI_ICON_VERTICAL_LINE_BRIGHT_W, GUI_UI_ICON_VERTICAL_LINE_BRIGHT_H, m_tRect.x1 + m_tRect.x2 - 1, m_tRect.y1 + 1, 1, m_tRect.y2 - 2);
-				renderer->fillRectangle(m_tRect.x1 + 1, m_tRect.y1 + 1, m_tRect.x2 - 2, m_tRect.y2 - 2, 64, 64, 64, 255);
-				if(m_item)
-					m_item->render(m_tRect.x1 + 10, m_tRect.y1 + 10, 32);
-			}
-
-		private:
-			std::unique_ptr<ItemUI> m_item;
-	};
 
 	std::string lootCatalogItemText(Uint16 itemId)
 	{
@@ -224,14 +225,14 @@ namespace
 		return text;
 	}
 
-	std::string appendLootItemId(const std::string& currentText, Uint16 itemId)
+	std::vector<Uint16> parseLootItemIds(const std::string& text)
 	{
 		std::vector<Uint16> ids;
 		Uint32 value = 0;
 		bool readingNumber = false;
-		for(size_t i = 0; i <= currentText.size(); ++i)
+		for(size_t i = 0; i <= text.size(); ++i)
 		{
-			char character = (i < currentText.size() ? currentText[i] : ',');
+			char character = (i < text.size() ? text[i] : ',');
 			if(character >= '0' && character <= '9')
 			{
 				value = UTIL_min<Uint32>(65535, value * 10 + SDL_static_cast(Uint32, character - '0'));
@@ -246,9 +247,11 @@ namespace
 				readingNumber = false;
 			}
 		}
-		if(itemId != 0 && std::find(ids.begin(), ids.end(), itemId) == ids.end())
-			ids.push_back(itemId);
+		return ids;
+	}
 
+	std::string serializeLootItemIds(const std::vector<Uint16>& ids)
+	{
 		std::string result;
 		for(Uint16 id : ids)
 		{
@@ -259,22 +262,124 @@ namespace
 		return result;
 	}
 
-	void refreshLootCatalogSelection(GUI_Window* window, Sint32 selection)
+	std::string trimText(const std::string& text)
 	{
-		if(!window || g_lootCatalogItemIds.empty())
-			return;
-		selection = UTIL_max<Sint32>(0, UTIL_min<Sint32>(SDL_static_cast(Sint32, g_lootCatalogItemIds.size()) - 1, selection));
-		g_lootCatalogSelection = selection;
-		Uint16 itemId = g_lootCatalogItemIds[SDL_static_cast(size_t, selection)];
-		GUI_CaveBotLootPreview* preview = SDL_static_cast(GUI_CaveBotLootPreview*, window->getChild(CAVEBOT_LOOT_CATALOG_PREVIEW_EVENTID));
-		if(preview)
-			preview->setItem(itemId);
-		GUI_Label* label = SDL_static_cast(GUI_Label*, window->getChild(CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID));
-		if(label)
-			label->setName(std::string("Selecionado: ") + lootCatalogItemText(itemId));
+		size_t first = text.find_first_not_of(" \t\r\n");
+		if(first == std::string::npos)
+			return std::string();
+		size_t last = text.find_last_not_of(" \t\r\n");
+		return text.substr(first, last - first + 1);
 	}
 
-	void openLootItemCatalog(const std::string& searchText = std::string())
+	std::string titleText(std::string text)
+	{
+		bool upper = true;
+		for(char& character : text)
+		{
+			if(upper && character >= 'a' && character <= 'z')
+				character = SDL_static_cast(char, character - ('a' - 'A'));
+			upper = (character == ' ' || character == '-' || character == '\'');
+		}
+		return text;
+	}
+
+	std::vector<std::string> parseNameList(const std::string& text)
+	{
+		std::vector<std::string> names;
+		size_t start = 0;
+		while(start <= text.size())
+		{
+			size_t end = text.find(',', start);
+			std::string name = trimText(text.substr(start, end == std::string::npos ? std::string::npos : end - start));
+			if(!name.empty())
+			{
+				std::string key = lowerText(name);
+				bool exists = std::any_of(names.begin(), names.end(), [&key](const std::string& current) {return lowerText(current) == key;});
+				if(!exists)
+					names.push_back(name == "*" ? "*" : titleText(name));
+			}
+			if(end == std::string::npos)
+				break;
+			start = end + 1;
+		}
+		return names;
+	}
+
+	std::string serializeNameList(const std::vector<std::string>& names)
+	{
+		std::string result;
+		for(const std::string& name : names)
+		{
+			if(!result.empty())
+				result += ',';
+			result += name;
+		}
+		return result;
+	}
+
+	void setCatalogCount(GUI_Window* window, Uint32 id, size_t count, const char* singular, const char* plural)
+	{
+		GUI_Label* label = SDL_static_cast(GUI_Label*, window->getChild(id));
+		if(label)
+			label->setName(std::to_string(count) + (count == 1 ? singular : plural));
+	}
+
+	void refreshLootCatalogLists(GUI_Window* window)
+	{
+		if(!window)
+			return;
+		GUI_ListBox* selectedList = SDL_static_cast(GUI_ListBox*, window->getChild(CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID));
+		GUI_ListBox* availableList = SDL_static_cast(GUI_ListBox*, window->getChild(CAVEBOT_LOOT_CATALOG_AVAILABLE_EVENTID));
+		GUI_TextBox* selectedSearch = SDL_static_cast(GUI_TextBox*, window->getChild(CAVEBOT_LOOT_CATALOG_SELECTED_SEARCH_EVENTID));
+		GUI_TextBox* availableSearch = SDL_static_cast(GUI_TextBox*, window->getChild(CAVEBOT_LOOT_CATALOG_AVAILABLE_SEARCH_EVENTID));
+		if(!selectedList || !availableList)
+			return;
+
+		const std::string selectedFilter = lowerText(selectedSearch ? selectedSearch->getActualText() : std::string());
+		const std::string availableFilter = lowerText(availableSearch ? availableSearch->getActualText() : std::string());
+		selectedList->clear();
+		availableList->clear();
+		g_lootCatalogVisibleSelectedIds.clear();
+		g_lootCatalogAvailableIds.clear();
+		for(Uint16 itemId : g_lootCatalogSelectedIds)
+		{
+			std::string name = lootCatalogItemText(itemId);
+			if(selectedFilter.empty() || lowerText(name).find(selectedFilter) != std::string::npos)
+			{
+				g_lootCatalogVisibleSelectedIds.push_back(itemId);
+				selectedList->addItem(name, itemId);
+			}
+		}
+		for(Uint16 itemId : g_lootCatalogAllItemIds)
+		{
+			if(std::find(g_lootCatalogSelectedIds.begin(), g_lootCatalogSelectedIds.end(), itemId) != g_lootCatalogSelectedIds.end())
+				continue;
+			std::string name = lootCatalogItemText(itemId);
+			if(availableFilter.empty() || lowerText(name).find(availableFilter) != std::string::npos)
+			{
+				g_lootCatalogAvailableIds.push_back(itemId);
+				availableList->addItem(name, itemId);
+			}
+		}
+		if(!g_lootCatalogVisibleSelectedIds.empty())
+			selectedList->setSelect(0);
+		if(!g_lootCatalogAvailableIds.empty())
+			availableList->setSelect(0);
+		g_lootCatalogSelectedSelection = (g_lootCatalogVisibleSelectedIds.empty() ? -1 : 0);
+		g_lootCatalogAvailableSelection = (g_lootCatalogAvailableIds.empty() ? -1 : 0);
+		setCatalogCount(window, CAVEBOT_LOOT_CATALOG_SELECTED_COUNT_EVENTID, g_lootCatalogSelectedIds.size(), " item", " itens");
+		setCatalogCount(window, CAVEBOT_LOOT_CATALOG_AVAILABLE_COUNT_EVENTID, g_lootCatalogAvailableIds.size(), " item", " itens");
+	}
+
+	void updateLootHiddenField()
+	{
+		GUI_Window* caveWindow = g_engine.getWindow(GUI_WINDOW_CAVEBOTOPTIONS);
+		GUI_TextBox* ids = (caveWindow ? SDL_static_cast(GUI_TextBox*, caveWindow->getChild(CAVEBOT_LOOT_IDS_EVENTID)) : NULL);
+		if(ids)
+			ids->setText(serializeLootItemIds(g_lootCatalogSelectedIds));
+	}
+
+	void openLootItemCatalog()
 	{
 		GUI_Window* oldWindow = g_engine.getWindow(GUI_WINDOW_CAVEBOTLOOTITEMS);
 		if(oldWindow)
@@ -290,60 +395,267 @@ namespace
 					g_lootCatalogAllItemIds.push_back(itemId);
 			}
 		}
-		g_lootCatalogItemIds.clear();
-		std::string wantedName = lowerText(searchText);
-		for(Uint16 itemId : g_lootCatalogAllItemIds)
-		{
-			if(wantedName.empty() || lowerText(lootCatalogItemText(itemId)).find(wantedName) != std::string::npos)
-				g_lootCatalogItemIds.push_back(itemId);
-		}
+		GUI_Window* caveWindow = g_engine.getWindow(GUI_WINDOW_CAVEBOTOPTIONS);
+		GUI_TextBox* ids = (caveWindow ? SDL_static_cast(GUI_TextBox*, caveWindow->getChild(CAVEBOT_LOOT_IDS_EVENTID)) : NULL);
+		g_lootCatalogSelectedIds = parseLootItemIds(ids ? ids->getActualText() : g_caveBot.getSettings().lootItemIds);
 
-		GUI_Window* window = new GUI_Window(iRect(0, 0, CAVEBOT_LOOT_CATALOG_WIDTH, CAVEBOT_LOOT_CATALOG_HEIGHT), "Lista de itens para loot", GUI_WINDOW_CAVEBOTLOOTITEMS);
-		window->addChild(new GUI_Label(iRect(18, 31, 0, 0), "Buscar nome:"));
-		GUI_TextBox* search = new GUI_TextBox(iRect(94, 27, 150, 16), searchText, CAVEBOT_LOOT_CATALOG_SEARCH_EVENTID);
+		GUI_Window* window = new GUI_Window(iRect(0, 0, CAVEBOT_CATALOG_WIDTH, CAVEBOT_CATALOG_HEIGHT), "Autoloot - lista de itens", GUI_WINDOW_CAVEBOTLOOTITEMS);
+		window->addChild(new GUI_Label(iRect(18, 27, 0, 0), "Itens no autoloot"));
+		window->addChild(new GUI_Label(iRect(300, 27, 0, 0), "", CAVEBOT_LOOT_CATALOG_SELECTED_COUNT_EVENTID));
+		window->addChild(new GUI_Label(iRect(392, 27, 0, 0), "Itens para adicionar"));
+		window->addChild(new GUI_Label(iRect(675, 27, 0, 0), "", CAVEBOT_LOOT_CATALOG_AVAILABLE_COUNT_EVENTID));
+		window->addChild(new GUI_Label(iRect(18, 51, 0, 0), "Buscar:"));
+		GUI_TextBox* search = new GUI_TextBox(iRect(68, 47, 300, 16), std::string(), CAVEBOT_LOOT_CATALOG_SELECTED_SEARCH_EVENTID);
 		search->setMaxLength(80);
+		search->setTextEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_SELECTED_SEARCH_EVENTID);
 		search->startEvents();
 		window->addChild(search);
-		GUI_Button* button = new GUI_Button(iRect(254, 25, GUI_UI_BUTTON_86PX_GRAY_UP_W, GUI_UI_BUTTON_86PX_GRAY_UP_H), "Buscar");
-		button->setButtonEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_FIND_EVENTID);
-		button->startEvents();
-		window->addChild(button);
+		window->addChild(new GUI_Label(iRect(392, 51, 0, 0), "Buscar:"));
+		search = new GUI_TextBox(iRect(442, 47, 300, 16), std::string(), CAVEBOT_LOOT_CATALOG_AVAILABLE_SEARCH_EVENTID);
+		search->setMaxLength(80);
+		search->setTextEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_AVAILABLE_SEARCH_EVENTID);
+		search->startEvents();
+		window->addChild(search);
 
-		GUI_ListBox* list = new GUI_ListBox(iRect(18, 57, 265, 340), CAVEBOT_LOOT_CATALOG_LIST_EVENTID);
-		for(Uint16 itemId : g_lootCatalogItemIds)
-			list->add(lootCatalogItemText(itemId));
-		list->setEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_LIST_EVENTID);
-		if(!g_lootCatalogItemIds.empty())
-			list->setSelect(0);
+		GUI_ListBox* list = new GUI_ListBox(iRect(18, 73, 350, 345), CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID);
+		list->setEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID);
+		list->startEvents();
+		window->addChild(list);
+		list = new GUI_ListBox(iRect(392, 73, 350, 345), CAVEBOT_LOOT_CATALOG_AVAILABLE_EVENTID);
+		list->setEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_AVAILABLE_EVENTID);
 		list->startEvents();
 		window->addChild(list);
 
-		GUI_CaveBotLootPreview* preview = new GUI_CaveBotLootPreview(iRect(315, 57, 52, 52), CAVEBOT_LOOT_CATALOG_PREVIEW_EVENTID);
-		window->addChild(preview);
-		window->addChild(new GUI_Label(iRect(300, 121, 0, 0), "Selecionado: -", CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID));
-		window->addChild(new GUI_Label(iRect(300, 146, 0, 0), "Selecione um item"));
-		window->addChild(new GUI_Label(iRect(300, 160, 0, 0), "e clique Add."));
-
-		button = new GUI_Button(iRect(300, 190, GUI_UI_BUTTON_86PX_GREEN_UP_W, GUI_UI_BUTTON_86PX_GREEN_UP_H), "Add");
+		GUI_Button* button = new GUI_Button(iRect(282, 430, GUI_UI_BUTTON_86PX_GRAY_UP_W, GUI_UI_BUTTON_86PX_GRAY_UP_H), "Remover >");
+		button->setButtonEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_REMOVE_EVENTID);
+		button->startEvents();
+		window->addChild(button);
+		button = new GUI_Button(iRect(392, 430, GUI_UI_BUTTON_86PX_GREEN_UP_W, GUI_UI_BUTTON_86PX_GREEN_UP_H), "< Adicionar");
 		button->setButtonEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_ADD_EVENTID);
 		button->startEvents();
 		window->addChild(button);
 
-		window->addChild(new GUI_Separator(iRect(13, CAVEBOT_LOOT_CATALOG_HEIGHT - 40, CAVEBOT_LOOT_CATALOG_WIDTH - 26, 2)));
-		button = new GUI_Button(iRect(CAVEBOT_LOOT_CATALOG_WIDTH - 56, CAVEBOT_LOOT_CATALOG_HEIGHT - 30, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), "Fechar", CLIENT_GUI_ESCAPE_TRIGGER);
+		window->addChild(new GUI_Separator(iRect(13, CAVEBOT_CATALOG_HEIGHT - 40, CAVEBOT_CATALOG_WIDTH - 26, 2)));
+		button = new GUI_Button(iRect(CAVEBOT_CATALOG_WIDTH - 56, CAVEBOT_CATALOG_HEIGHT - 30, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), "Fechar", CLIENT_GUI_ESCAPE_TRIGGER);
 		button->setButtonEventCallback(&caveBotLootItems_Events, CAVEBOT_LOOT_CATALOG_CLOSE_EVENTID);
 		button->startEvents();
 		window->addChild(button);
 
 		g_engine.addWindow(window, true);
-		if(!g_lootCatalogItemIds.empty())
-			refreshLootCatalogSelection(window, 0);
-		else
+		refreshLootCatalogLists(window);
+	}
+
+	const CaveBotMonsterCatalogEntry* findMonsterEntry(const std::string& name)
+	{
+		const std::string key = lowerText(name);
+		for(const CaveBotMonsterCatalogEntry& entry : g_monsterCatalog)
 		{
-			GUI_Label* label = SDL_static_cast(GUI_Label*, window->getChild(CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID));
-			if(label)
-				label->setName("Nenhum item encontrado");
+			if(entry.key == key)
+				return &entry;
 		}
+		return NULL;
+	}
+
+	void loadMonsterCatalog()
+	{
+		if(g_monsterCatalogLoaded)
+			return;
+		g_monsterCatalogLoaded = true;
+		g_monsterCatalog.push_back({"Todos", "*", 0, 0});
+
+		std::string path = g_basePath + ASSETS_CATALOG + PATH_PLATFORM_SLASH + "spawns.ofsp";
+		SDL_RWops* file = SDL_RWFromFile(path.c_str(), "rb");
+		if(!file)
+			return;
+		char magic[4];
+		if(SDL_RWread(file, magic, 1, sizeof(magic)) != sizeof(magic) || SDL_memcmp(magic, "OFSP", sizeof(magic)) != 0)
+		{
+			SDL_RWclose(file);
+			return;
+		}
+		Uint32 version = SDL_ReadLE32(file);
+		Uint16 count = SDL_ReadLE16(file);
+		if(version != 2)
+		{
+			SDL_RWclose(file);
+			return;
+		}
+		for(Uint16 index = 0; index < count; ++index)
+		{
+			Uint8 nameLength = 0;
+			if(SDL_RWread(file, &nameLength, 1, 1) != 1)
+				break;
+			std::string name(nameLength, '\0');
+			if(nameLength != 0 && SDL_RWread(file, &name[0], 1, nameLength) != nameLength)
+				break;
+			Uint16 lookType = SDL_ReadLE16(file);
+			Uint8 colors[4] = {};
+			if(SDL_RWread(file, colors, 1, sizeof(colors)) != sizeof(colors))
+				break;
+			SDL_ReadLE32(file);
+			SDL_ReadLE32(file);
+			Uint16 lootCount = SDL_ReadLE16(file);
+			for(Uint16 lootIndex = 0; lootIndex < lootCount; ++lootIndex)
+			{
+				SDL_ReadLE16(file);
+				SDL_ReadLE16(file);
+				SDL_ReadLE16(file);
+				Uint8 lootNameLength = 0;
+				if(SDL_RWread(file, &lootNameLength, 1, 1) != 1)
+				{
+					lootCount = lootIndex;
+					break;
+				}
+				if(lootNameLength != 0)
+					SDL_RWseek(file, lootNameLength, RW_SEEK_CUR);
+			}
+			if(name.empty())
+				continue;
+			CaveBotMonsterCatalogEntry entry;
+			entry.name = titleText(name);
+			entry.key = lowerText(name);
+			entry.lookType = lookType;
+			entry.outfitColor = (SDL_static_cast(Uint32, colors[3]) << 24) | (SDL_static_cast(Uint32, colors[2]) << 16) |
+				(SDL_static_cast(Uint32, colors[1]) << 8) | SDL_static_cast(Uint32, colors[0]);
+			g_monsterCatalog.push_back(entry);
+		}
+		SDL_RWclose(file);
+		std::stable_sort(g_monsterCatalog.begin() + 1, g_monsterCatalog.end(), [](const CaveBotMonsterCatalogEntry& left, const CaveBotMonsterCatalogEntry& right) {
+			return left.key < right.key;
+		});
+	}
+
+	void addKnownMonstersToCatalog()
+	{
+		for(const auto& known : g_map.getKnownCreatures())
+		{
+			Creature* creature = known.second;
+			if(!creature || !creature->isMonster() || creature->getName().empty() || findMonsterEntry(creature->getName()))
+				continue;
+			CaveBotMonsterCatalogEntry entry;
+			entry.name = creature->getName();
+			entry.key = lowerText(entry.name);
+			entry.lookType = (creature->getThingType() ? creature->getThingType()->m_id : 0);
+			entry.outfitColor = creature->getOutfitPacked();
+			g_monsterCatalog.push_back(entry);
+		}
+	}
+
+	void updateTargetHiddenField()
+	{
+		GUI_Window* caveWindow = g_engine.getWindow(GUI_WINDOW_CAVEBOTOPTIONS);
+		GUI_TextBox* names = (caveWindow ? SDL_static_cast(GUI_TextBox*, caveWindow->getChild(CAVEBOT_TARGET_NAMES_EVENTID)) : NULL);
+		if(names)
+			names->setText(serializeNameList(g_monsterCatalogSelected));
+	}
+
+	void addMonsterListRow(GUI_ListBox* list, const CaveBotMonsterCatalogEntry& entry)
+	{
+		list->addCreature(entry.name, entry.lookType, entry.outfitColor);
+	}
+
+	void refreshMonsterCatalogLists(GUI_Window* window)
+	{
+		if(!window)
+			return;
+		GUI_ListBox* selectedList = SDL_static_cast(GUI_ListBox*, window->getChild(CAVEBOT_TARGET_CATALOG_SELECTED_EVENTID));
+		GUI_ListBox* availableList = SDL_static_cast(GUI_ListBox*, window->getChild(CAVEBOT_TARGET_CATALOG_AVAILABLE_EVENTID));
+		GUI_TextBox* selectedSearch = SDL_static_cast(GUI_TextBox*, window->getChild(CAVEBOT_TARGET_CATALOG_SELECTED_SEARCH_EVENTID));
+		GUI_TextBox* availableSearch = SDL_static_cast(GUI_TextBox*, window->getChild(CAVEBOT_TARGET_CATALOG_AVAILABLE_SEARCH_EVENTID));
+		if(!selectedList || !availableList)
+			return;
+		const std::string selectedFilter = lowerText(selectedSearch ? selectedSearch->getActualText() : std::string());
+		const std::string availableFilter = lowerText(availableSearch ? availableSearch->getActualText() : std::string());
+		selectedList->clear();
+		availableList->clear();
+		g_monsterCatalogVisibleSelected.clear();
+		g_monsterCatalogAvailable.clear();
+		for(size_t selectedIndex = 0; selectedIndex < g_monsterCatalogSelected.size(); ++selectedIndex)
+		{
+			const std::string& selected = g_monsterCatalogSelected[selectedIndex];
+			const CaveBotMonsterCatalogEntry* entry = findMonsterEntry(selected);
+			std::string displayName = (selected == "*" ? "Todos" : (entry ? entry->name : selected));
+			if(selectedFilter.empty() || lowerText(displayName).find(selectedFilter) != std::string::npos)
+			{
+				g_monsterCatalogVisibleSelected.push_back(selectedIndex);
+				if(entry)
+					addMonsterListRow(selectedList, *entry);
+				else
+					selectedList->addCreature(displayName, 0, 0);
+			}
+		}
+		for(size_t catalogIndex = 0; catalogIndex < g_monsterCatalog.size(); ++catalogIndex)
+		{
+			const CaveBotMonsterCatalogEntry& entry = g_monsterCatalog[catalogIndex];
+			bool alreadySelected = std::any_of(g_monsterCatalogSelected.begin(), g_monsterCatalogSelected.end(), [&entry](const std::string& selected) {
+				return lowerText(selected) == entry.key;
+			});
+			if(alreadySelected || (!availableFilter.empty() && lowerText(entry.name).find(availableFilter) == std::string::npos))
+				continue;
+			g_monsterCatalogAvailable.push_back(catalogIndex);
+			addMonsterListRow(availableList, entry);
+		}
+		if(!g_monsterCatalogVisibleSelected.empty())
+			selectedList->setSelect(0);
+		if(!g_monsterCatalogAvailable.empty())
+			availableList->setSelect(0);
+		g_monsterCatalogSelectedSelection = (g_monsterCatalogVisibleSelected.empty() ? -1 : 0);
+		g_monsterCatalogAvailableSelection = (g_monsterCatalogAvailable.empty() ? -1 : 0);
+		setCatalogCount(window, CAVEBOT_TARGET_CATALOG_SELECTED_COUNT_EVENTID, g_monsterCatalogSelected.size(), " alvo", " alvos");
+		setCatalogCount(window, CAVEBOT_TARGET_CATALOG_AVAILABLE_COUNT_EVENTID, g_monsterCatalogAvailable.size(), " opcao", " opcoes");
+	}
+
+	void openTargetCatalog()
+	{
+		GUI_Window* oldWindow = g_engine.getWindow(GUI_WINDOW_CAVEBOTTARGETS);
+		if(oldWindow)
+			g_engine.removeWindow(oldWindow);
+		loadMonsterCatalog();
+		addKnownMonstersToCatalog();
+		GUI_Window* caveWindow = g_engine.getWindow(GUI_WINDOW_CAVEBOTOPTIONS);
+		GUI_TextBox* names = (caveWindow ? SDL_static_cast(GUI_TextBox*, caveWindow->getChild(CAVEBOT_TARGET_NAMES_EVENTID)) : NULL);
+		g_monsterCatalogSelected = parseNameList(names ? names->getActualText() : g_caveBot.getSettings().targetNames);
+
+		GUI_Window* window = new GUI_Window(iRect(0, 0, CAVEBOT_CATALOG_WIDTH, CAVEBOT_CATALOG_HEIGHT), "TargetBot - lista de monstros", GUI_WINDOW_CAVEBOTTARGETS);
+		window->addChild(new GUI_Label(iRect(18, 27, 0, 0), "Monstros atacados"));
+		window->addChild(new GUI_Label(iRect(300, 27, 0, 0), "", CAVEBOT_TARGET_CATALOG_SELECTED_COUNT_EVENTID));
+		window->addChild(new GUI_Label(iRect(392, 27, 0, 0), "Monstros para adicionar"));
+		window->addChild(new GUI_Label(iRect(675, 27, 0, 0), "", CAVEBOT_TARGET_CATALOG_AVAILABLE_COUNT_EVENTID));
+		window->addChild(new GUI_Label(iRect(18, 51, 0, 0), "Buscar:"));
+		GUI_TextBox* search = new GUI_TextBox(iRect(68, 47, 300, 16), std::string(), CAVEBOT_TARGET_CATALOG_SELECTED_SEARCH_EVENTID);
+		search->setMaxLength(80);
+		search->setTextEventCallback(&caveBotTargets_Events, CAVEBOT_TARGET_CATALOG_SELECTED_SEARCH_EVENTID);
+		search->startEvents();
+		window->addChild(search);
+		window->addChild(new GUI_Label(iRect(392, 51, 0, 0), "Buscar:"));
+		search = new GUI_TextBox(iRect(442, 47, 300, 16), std::string(), CAVEBOT_TARGET_CATALOG_AVAILABLE_SEARCH_EVENTID);
+		search->setMaxLength(80);
+		search->setTextEventCallback(&caveBotTargets_Events, CAVEBOT_TARGET_CATALOG_AVAILABLE_SEARCH_EVENTID);
+		search->startEvents();
+		window->addChild(search);
+		GUI_ListBox* list = new GUI_ListBox(iRect(18, 73, 350, 345), CAVEBOT_TARGET_CATALOG_SELECTED_EVENTID);
+		list->setEventCallback(&caveBotTargets_Events, CAVEBOT_TARGET_CATALOG_SELECTED_EVENTID);
+		list->startEvents();
+		window->addChild(list);
+		list = new GUI_ListBox(iRect(392, 73, 350, 345), CAVEBOT_TARGET_CATALOG_AVAILABLE_EVENTID);
+		list->setEventCallback(&caveBotTargets_Events, CAVEBOT_TARGET_CATALOG_AVAILABLE_EVENTID);
+		list->startEvents();
+		window->addChild(list);
+		GUI_Button* button = new GUI_Button(iRect(282, 430, GUI_UI_BUTTON_86PX_GRAY_UP_W, GUI_UI_BUTTON_86PX_GRAY_UP_H), "Remover >");
+		button->setButtonEventCallback(&caveBotTargets_Events, CAVEBOT_TARGET_CATALOG_REMOVE_EVENTID);
+		button->startEvents();
+		window->addChild(button);
+		button = new GUI_Button(iRect(392, 430, GUI_UI_BUTTON_86PX_GREEN_UP_W, GUI_UI_BUTTON_86PX_GREEN_UP_H), "< Adicionar");
+		button->setButtonEventCallback(&caveBotTargets_Events, CAVEBOT_TARGET_CATALOG_ADD_EVENTID);
+		button->startEvents();
+		window->addChild(button);
+		window->addChild(new GUI_Separator(iRect(13, CAVEBOT_CATALOG_HEIGHT - 40, CAVEBOT_CATALOG_WIDTH - 26, 2)));
+		button = new GUI_Button(iRect(CAVEBOT_CATALOG_WIDTH - 56, CAVEBOT_CATALOG_HEIGHT - 30, GUI_UI_BUTTON_43PX_GRAY_UP_W, GUI_UI_BUTTON_43PX_GRAY_UP_H), "Fechar", CLIENT_GUI_ESCAPE_TRIGGER);
+		button->setButtonEventCallback(&caveBotTargets_Events, CAVEBOT_TARGET_CATALOG_CLOSE_EVENTID);
+		button->startEvents();
+		window->addChild(button);
+		g_engine.addWindow(window, true);
+		refreshMonsterCatalogLists(window);
 	}
 
 	bool getChecked(GUI_Window* window, Uint32 id)
@@ -395,6 +707,13 @@ namespace
 		textBox->setMaxLength(maxLength);
 		textBox->setOnlyNumbers(numbersOnly);
 		textBox->startEvents();
+		window->addChild(textBox);
+	}
+
+	void addHiddenTextBox(GUI_Window* window, const std::string& text, Uint32 id, Uint32 maxLength)
+	{
+		GUI_TextBox* textBox = new GUI_TextBox(iRect(-10, -10, 0, 0), text, id);
+		textBox->setMaxLength(maxLength);
 		window->addChild(textBox);
 	}
 
@@ -474,31 +793,120 @@ void caveBotLootItems_Events(Uint32 event, Sint32 status)
 		g_engine.removeWindow(window);
 		return;
 	}
-	if(event == CAVEBOT_LOOT_CATALOG_LIST_EVENTID)
+	if(event == CAVEBOT_LOOT_CATALOG_SELECTED_SEARCH_EVENTID || event == CAVEBOT_LOOT_CATALOG_AVAILABLE_SEARCH_EVENTID)
+	{
+		refreshLootCatalogLists(window);
+		return;
+	}
+	if(event == CAVEBOT_LOOT_CATALOG_AVAILABLE_EVENTID)
 	{
 		if(status < 0)
-			status = ~status;
-		refreshLootCatalogSelection(window, status);
-		return;
-	}
-	if(event == CAVEBOT_LOOT_CATALOG_FIND_EVENTID)
-	{
-		GUI_TextBox* search = SDL_static_cast(GUI_TextBox*, window->getChild(CAVEBOT_LOOT_CATALOG_SEARCH_EVENTID));
-		openLootItemCatalog(search ? search->getActualText() : std::string());
-		return;
-	}
-	if(event == CAVEBOT_LOOT_CATALOG_ADD_EVENTID && !g_lootCatalogItemIds.empty())
-	{
-		Uint16 itemId = g_lootCatalogItemIds[SDL_static_cast(size_t, g_lootCatalogSelection)];
-		GUI_Window* caveWindow = g_engine.getWindow(GUI_WINDOW_CAVEBOTOPTIONS);
-		GUI_TextBox* ids = (caveWindow ? SDL_static_cast(GUI_TextBox*, caveWindow->getChild(CAVEBOT_LOOT_IDS_EVENTID)) : NULL);
-		if(ids)
 		{
-			ids->setText(appendLootItemId(ids->getActualText(), itemId));
-			GUI_Label* label = SDL_static_cast(GUI_Label*, window->getChild(CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID));
-			if(label)
-				label->setName("Adicionado ao loot.");
+			status = ~status;
+			g_lootCatalogAvailableSelection = status;
+			caveBotLootItems_Events(CAVEBOT_LOOT_CATALOG_ADD_EVENTID, 0);
 		}
+		else
+			g_lootCatalogAvailableSelection = status;
+		return;
+	}
+	if(event == CAVEBOT_LOOT_CATALOG_SELECTED_EVENTID)
+	{
+		if(status < 0)
+		{
+			status = ~status;
+			g_lootCatalogSelectedSelection = status;
+			caveBotLootItems_Events(CAVEBOT_LOOT_CATALOG_REMOVE_EVENTID, 0);
+		}
+		else
+			g_lootCatalogSelectedSelection = status;
+		return;
+	}
+	if(event == CAVEBOT_LOOT_CATALOG_ADD_EVENTID && g_lootCatalogAvailableSelection >= 0 &&
+		SDL_static_cast(size_t, g_lootCatalogAvailableSelection) < g_lootCatalogAvailableIds.size())
+	{
+		Uint16 itemId = g_lootCatalogAvailableIds[SDL_static_cast(size_t, g_lootCatalogAvailableSelection)];
+		if(std::find(g_lootCatalogSelectedIds.begin(), g_lootCatalogSelectedIds.end(), itemId) == g_lootCatalogSelectedIds.end())
+			g_lootCatalogSelectedIds.push_back(itemId);
+		updateLootHiddenField();
+		refreshLootCatalogLists(window);
+		return;
+	}
+	if(event == CAVEBOT_LOOT_CATALOG_REMOVE_EVENTID && g_lootCatalogSelectedSelection >= 0 &&
+		SDL_static_cast(size_t, g_lootCatalogSelectedSelection) < g_lootCatalogVisibleSelectedIds.size())
+	{
+		Uint16 itemId = g_lootCatalogVisibleSelectedIds[SDL_static_cast(size_t, g_lootCatalogSelectedSelection)];
+		g_lootCatalogSelectedIds.erase(std::remove(g_lootCatalogSelectedIds.begin(), g_lootCatalogSelectedIds.end(), itemId), g_lootCatalogSelectedIds.end());
+		updateLootHiddenField();
+		refreshLootCatalogLists(window);
+	}
+}
+
+void caveBotTargets_Events(Uint32 event, Sint32 status)
+{
+	GUI_Window* window = g_engine.getCurrentWindow();
+	if(!window || window->getInternalID() != GUI_WINDOW_CAVEBOTTARGETS)
+		return;
+	if(event == CAVEBOT_TARGET_CATALOG_CLOSE_EVENTID)
+	{
+		g_engine.removeWindow(window);
+		return;
+	}
+	if(event == CAVEBOT_TARGET_CATALOG_SELECTED_SEARCH_EVENTID || event == CAVEBOT_TARGET_CATALOG_AVAILABLE_SEARCH_EVENTID)
+	{
+		refreshMonsterCatalogLists(window);
+		return;
+	}
+	if(event == CAVEBOT_TARGET_CATALOG_AVAILABLE_EVENTID)
+	{
+		if(status < 0)
+		{
+			status = ~status;
+			g_monsterCatalogAvailableSelection = status;
+			caveBotTargets_Events(CAVEBOT_TARGET_CATALOG_ADD_EVENTID, 0);
+		}
+		else
+			g_monsterCatalogAvailableSelection = status;
+		return;
+	}
+	if(event == CAVEBOT_TARGET_CATALOG_SELECTED_EVENTID)
+	{
+		if(status < 0)
+		{
+			status = ~status;
+			g_monsterCatalogSelectedSelection = status;
+			caveBotTargets_Events(CAVEBOT_TARGET_CATALOG_REMOVE_EVENTID, 0);
+		}
+		else
+			g_monsterCatalogSelectedSelection = status;
+		return;
+	}
+	if(event == CAVEBOT_TARGET_CATALOG_ADD_EVENTID && g_monsterCatalogAvailableSelection >= 0 &&
+		SDL_static_cast(size_t, g_monsterCatalogAvailableSelection) < g_monsterCatalogAvailable.size())
+	{
+		const CaveBotMonsterCatalogEntry& entry = g_monsterCatalog[g_monsterCatalogAvailable[SDL_static_cast(size_t, g_monsterCatalogAvailableSelection)]];
+		if(entry.key == "*")
+		{
+			g_monsterCatalogSelected.clear();
+			g_monsterCatalogSelected.push_back("*");
+		}
+		else
+		{
+			g_monsterCatalogSelected.erase(std::remove(g_monsterCatalogSelected.begin(), g_monsterCatalogSelected.end(), "*"), g_monsterCatalogSelected.end());
+			g_monsterCatalogSelected.push_back(entry.name);
+		}
+		updateTargetHiddenField();
+		refreshMonsterCatalogLists(window);
+		return;
+	}
+	if(event == CAVEBOT_TARGET_CATALOG_REMOVE_EVENTID && g_monsterCatalogSelectedSelection >= 0 &&
+		SDL_static_cast(size_t, g_monsterCatalogSelectedSelection) < g_monsterCatalogVisibleSelected.size())
+	{
+		size_t selectedIndex = g_monsterCatalogVisibleSelected[SDL_static_cast(size_t, g_monsterCatalogSelectedSelection)];
+		if(selectedIndex < g_monsterCatalogSelected.size())
+			g_monsterCatalogSelected.erase(g_monsterCatalogSelected.begin() + selectedIndex);
+		updateTargetHiddenField();
+		refreshMonsterCatalogLists(window);
 	}
 }
 
@@ -524,6 +932,11 @@ void caveBotOptions_Events(Uint32 event, Sint32 status)
 	if(event == CAVEBOT_LOOT_ITEM_LIST_EVENTID)
 	{
 		openLootItemCatalog();
+		return;
+	}
+	if(event == CAVEBOT_TARGET_LIST_EVENTID)
+	{
+		openTargetCatalog();
 		return;
 	}
 	if(event == CAVEBOT_WAYPOINT_LIST_EVENTID)
@@ -673,8 +1086,10 @@ void UTIL_caveBotOptions()
 	window->addChild(new GUI_Separator(iRect(13, 374, CAVEBOT_OPTIONS_WIDTH - 26, 2)));
 
 	addCheckBox(window, 18, 382, 130, "TargetBot", settings.targetEnabled, CAVEBOT_TARGET_ENABLED_EVENTID);
-	addLabel(window, 155, 387, "Monstros (* = todos):");
-	addTextBox(window, 275, 383, 285, settings.targetNames, CAVEBOT_TARGET_NAMES_EVENTID, 200);
+	addLabel(window, 155, 387, "Monstros atacados:");
+	addButton(window, 275, 381, "Lista alvos", CAVEBOT_TARGET_LIST_EVENTID);
+	addLabel(window, 371, 387, settings.targetNames == "*" ? "Todos" : "Abrir para ver e editar");
+	addHiddenTextBox(window, settings.targetNames, CAVEBOT_TARGET_NAMES_EVENTID, 500);
 	addLabel(window, 18, 416, "Runa ID:");
 	addTextBox(window, 71, 412, 65, numberText(settings.attackRuneId), CAVEBOT_RUNE_ID_EVENTID, 5, true);
 	addLabel(window, 151, 416, "Sub:");
@@ -699,12 +1114,14 @@ void UTIL_caveBotOptions()
 
 	addCheckBox(window, 18, 542, 120, "Auto Loot", settings.lootEnabled, CAVEBOT_LOOT_ENABLED_EVENTID);
 	addCheckBox(window, 145, 542, 100, "Loot gold", settings.lootGold, CAVEBOT_LOOT_GOLD_EVENTID);
-	addLabel(window, 255, 547, "IDs adicionais:");
-	addTextBox(window, 340, 543, 220, settings.lootItemIds, CAVEBOT_LOOT_IDS_EVENTID, 300);
+	addButton(window, 255, 540, "Lista itens", CAVEBOT_LOOT_ITEM_LIST_EVENTID);
+	std::vector<Uint16> selectedLootItems = parseLootItemIds(settings.lootItemIds);
+	std::string selectedLootText = std::to_string(selectedLootItems.size()) + (selectedLootItems.size() == 1 ? " item selecionado" : " itens selecionados");
+	window->addChild(new GUI_Label(iRect(351, 547, 0, 0), selectedLootText));
+	addHiddenTextBox(window, settings.lootItemIds, CAVEBOT_LOOT_IDS_EVENTID, 1000);
 	addLabel(window, 18, 574, "Mochila destino aberta (0-15):");
 	addTextBox(window, 189, 570, 35, numberText(settings.lootDestinationContainer), CAVEBOT_LOOT_DESTINATION_EVENTID, 2, true);
 	addCheckBox(window, 245, 568, 150, "Loot after kill", settings.lootAfterKill, CAVEBOT_LOOT_AFTER_KILL_EVENTID);
-	addButton(window, 474, 566, "Lista itens", CAVEBOT_LOOT_ITEM_LIST_EVENTID);
 	addCheckBox(window, 18, 594, 175, "Itens no chao com cap <", settings.dropLootNoCapacity, CAVEBOT_DROP_LOOT_NO_CAP_EVENTID);
 	addTextBox(window, 195, 590, 55, numberText(settings.dropLootCapacity), CAVEBOT_DROP_LOOT_CAPACITY_EVENTID, 6, true);
 	addCheckBox(window, 280, 594, 175, "Gold no chao com cap <", settings.dropGoldNoCapacity, CAVEBOT_DROP_GOLD_NO_CAP_EVENTID);

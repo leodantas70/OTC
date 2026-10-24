@@ -576,80 +576,6 @@ void Engine::loadCFG()
 		m_rightPanel = SDL_static_cast(Sint32, SDL_strtol(data.c_str(), NULL, 10));
 		m_rightPanel = (m_rightPanel == 0 ? GUI_PANEL_MAIN : m_rightPanel + GUI_PANEL_EXTRA_RIGHT_START - 1);
 
-		// Load the key slots before their optional action payloads. This keeps
-		// newly created hotkeys visible even while they are still unconfigured.
-		vectorData = cfg.fetchKeys("HotkeySlot");
-		for(StringVector::iterator it = vectorData.begin(), end = vectorData.end(); it != end; ++it)
-		{
-			data = (*it);
-			if(data.empty())
-				continue;
-
-			size_t p1 = data.find('|');
-			if(p1 == std::string::npos)
-				continue;
-
-			SDL_Keycode keycode = SDL_static_cast(SDL_Keycode, SDL_strtol(data.substr(0, p1).c_str(), NULL, 10));
-			Uint16 modifers = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p1 + 1).c_str(), NULL, 10));
-			if(keycode != SDLK_UNKNOWN)
-				bindHotkeyAction(keycode, modifers, "", false);
-		}
-
-		vectorData = cfg.fetchKeys("HotkeyAction");
-		for(StringVector::iterator it = vectorData.begin(), end = vectorData.end(); it != end; ++it)
-		{
-			data = (*it);
-			if(data.empty())
-				continue;
-
-			size_t p1 = data.find('|');
-			if(p1 == std::string::npos)
-				continue;
-			size_t p2 = data.find('|', p1 + 1);
-			if(p2 == std::string::npos)
-				continue;
-			size_t p3 = data.rfind('|');
-			if(p3 == std::string::npos || p3 <= p2)
-				continue;
-
-			SDL_Keycode keycode = SDL_static_cast(SDL_Keycode, SDL_strtol(data.substr(0, p1).c_str(), NULL, 10));
-			Uint16 modifers = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p1 + 1, p2 - p1 - 1).c_str(), NULL, 10));
-			std::string text = data.substr(p2 + 1, p3 - p2 - 1);
-			bool sendAuto = (data.substr(p3 + 1) == "yes");
-
-			if(!text.empty())
-				bindHotkeyAction(keycode, modifers, text, sendAuto);
-		}
-
-		vectorData = cfg.fetchKeys("HotkeyItem");
-		for(StringVector::iterator it = vectorData.begin(), end = vectorData.end(); it != end; ++it)
-		{
-			data = (*it);
-			if(data.empty())
-				continue;
-
-			size_t p1 = data.find('|');
-			if(p1 == std::string::npos)
-				continue;
-			size_t p2 = data.find('|', p1 + 1);
-			if(p2 == std::string::npos)
-				continue;
-			size_t p3 = data.find('|', p2 + 1);
-			if(p3 == std::string::npos)
-				continue;
-			size_t p4 = data.find('|', p3 + 1);
-			if(p4 == std::string::npos)
-				continue;
-
-			SDL_Keycode keycode = SDL_static_cast(SDL_Keycode, SDL_strtol(data.substr(0, p1).c_str(), NULL, 10));
-			Uint16 modifers = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p1 + 1, p2 - p1 - 1).c_str(), NULL, 10));
-			Uint16 itemId = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p2 + 1, p3 - p2 - 1).c_str(), NULL, 10));
-			Uint8 itemSubtype = SDL_static_cast(Uint8, SDL_strtoul(data.substr(p3 + 1, p4 - p3 - 1).c_str(), NULL, 10));
-			Uint8 usageType = SDL_static_cast(Uint8, SDL_strtoul(data.substr(p4 + 1).c_str(), NULL, 10));
-
-			if(itemId != 0)
-				bindHotkeyItem(keycode, modifers, itemId, itemSubtype, usageType);
-		}
 	}
 	#if CLIENT_OVVERIDE_VERSION > 0
 	if(!versionConfigured)
@@ -669,6 +595,97 @@ void Engine::loadCFG()
 	m_clientPort = getProtocolFeatureManager().getDefaultPort(m_clientPort);
 	g_game.clientChangeVersion(g_clientVersion, g_clientVersion);
 	#endif
+}
+
+void Engine::loadHotkeys()
+{
+	auto loadFromFile = [this](const std::string& fileName) -> bool
+	{
+		Config cfg;
+		if(!cfg.openToRead(fileName.c_str()))
+			return false;
+
+		StringVector slots = cfg.fetchKeys("HotkeySlot");
+		StringVector actions = cfg.fetchKeys("HotkeyAction");
+		StringVector items = cfg.fetchKeys("HotkeyItem");
+		if(slots.empty() && actions.empty() && items.empty())
+			return false;
+
+		for(const std::string& data : slots)
+		{
+			size_t p1 = data.find('|');
+			if(p1 == std::string::npos)
+				continue;
+			SDL_Keycode keycode = SDL_static_cast(SDL_Keycode, SDL_strtol(data.substr(0, p1).c_str(), NULL, 10));
+			Uint16 modifiers = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p1 + 1).c_str(), NULL, 10));
+			if(keycode != SDLK_UNKNOWN)
+				bindHotkeyAction(keycode, modifiers, "", false);
+		}
+
+		for(const std::string& data : actions)
+		{
+			size_t p1 = data.find('|');
+			size_t p2 = (p1 == std::string::npos ? std::string::npos : data.find('|', p1 + 1));
+			size_t p3 = data.rfind('|');
+			if(p1 == std::string::npos || p2 == std::string::npos || p3 == std::string::npos || p3 <= p2)
+				continue;
+			SDL_Keycode keycode = SDL_static_cast(SDL_Keycode, SDL_strtol(data.substr(0, p1).c_str(), NULL, 10));
+			Uint16 modifiers = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p1 + 1, p2 - p1 - 1).c_str(), NULL, 10));
+			std::string text = data.substr(p2 + 1, p3 - p2 - 1);
+			if(keycode != SDLK_UNKNOWN && !text.empty())
+				bindHotkeyAction(keycode, modifiers, text, data.substr(p3 + 1) == "yes");
+		}
+
+		for(const std::string& data : items)
+		{
+			size_t p1 = data.find('|');
+			size_t p2 = (p1 == std::string::npos ? std::string::npos : data.find('|', p1 + 1));
+			size_t p3 = (p2 == std::string::npos ? std::string::npos : data.find('|', p2 + 1));
+			size_t p4 = (p3 == std::string::npos ? std::string::npos : data.find('|', p3 + 1));
+			if(p1 == std::string::npos || p2 == std::string::npos || p3 == std::string::npos || p4 == std::string::npos)
+				continue;
+			SDL_Keycode keycode = SDL_static_cast(SDL_Keycode, SDL_strtol(data.substr(0, p1).c_str(), NULL, 10));
+			Uint16 modifiers = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p1 + 1, p2 - p1 - 1).c_str(), NULL, 10));
+			Uint16 itemId = SDL_static_cast(Uint16, SDL_strtoul(data.substr(p2 + 1, p3 - p2 - 1).c_str(), NULL, 10));
+			Uint8 itemSubtype = SDL_static_cast(Uint8, SDL_strtoul(data.substr(p3 + 1, p4 - p3 - 1).c_str(), NULL, 10));
+			Uint8 usageType = SDL_static_cast(Uint8, SDL_strtoul(data.substr(p4 + 1).c_str(), NULL, 10));
+			if(keycode != SDLK_UNKNOWN && itemId != 0)
+				bindHotkeyItem(keycode, modifiers, itemId, itemSubtype, usageType);
+		}
+		return true;
+	};
+
+	const std::string hotkeyFile = g_prefPath + "hotkeys.cfg";
+	if(!loadFromFile(hotkeyFile) && loadFromFile(g_prefPath + "config.cfg"))
+		saveHotkeys();
+}
+
+void Engine::saveHotkeys()
+{
+	Config cfg;
+	if(!cfg.openToSave((g_prefPath + "hotkeys.cfg").c_str()))
+		return;
+
+	for(HotkeyUsage& hk : m_hotkeys)
+	{
+		if(hk.hotkey != CLIENT_HOTKEY_ACTION || getHotkey(hk.keycode, hk.modifers) != &hk)
+			continue;
+
+		std::string prefix = std::to_string(SDL_static_cast(Sint32, hk.keycode)) + '|' +
+			std::to_string(SDL_static_cast(Uint32, hk.modifers));
+		cfg.insertKey("HotkeySlot", prefix);
+		if(hk.action.type == CLIENT_HOTKEY_ACTION_TEXT && hk.action.text.text && !hk.action.text.text->empty())
+		{
+			cfg.insertKey("HotkeyAction", prefix + '|' + *hk.action.text.text + '|' +
+				(hk.action.text.sendAutomatically ? "yes" : "no"));
+		}
+		else if(hk.action.type >= CLIENT_HOTKEY_ACTION_USEITEM && hk.action.type <= CLIENT_HOTKEY_ACTION_WITHCROSSHAIRS && hk.action.item.itemId != 0)
+		{
+			cfg.insertKey("HotkeyItem", prefix + '|' + std::to_string(SDL_static_cast(Uint32, hk.action.item.itemId)) + '|' +
+				std::to_string(SDL_static_cast(Uint32, hk.action.item.itemSubtype)) + '|' +
+				std::to_string(SDL_static_cast(Uint32, hk.action.item.usageType)));
+		}
+	}
 }
 
 void Engine::saveCFG()
@@ -890,47 +907,6 @@ void Engine::saveCFG()
 		len = SDL_snprintf(g_buffer, sizeof(g_buffer), "%d", (m_rightPanel == GUI_PANEL_MAIN ? 0 : m_rightPanel - GUI_PANEL_EXTRA_RIGHT_START + 1));
 		cfg.insertKey("RightSidebars", std::string(g_buffer, SDL_static_cast(size_t, len)));
 
-		for(std::vector<HotkeyUsage>::iterator it = m_hotkeys.begin(), end = m_hotkeys.end(); it != end; ++it)
-		{
-			HotkeyUsage& hk = (*it);
-			if(hk.hotkey != CLIENT_HOTKEY_ACTION || getHotkey(hk.keycode, hk.modifers) != &hk)
-				continue;
-
-			std::string slotEntry;
-			slotEntry += std::to_string(SDL_static_cast(Sint32, hk.keycode));
-			slotEntry += '|';
-			slotEntry += std::to_string(SDL_static_cast(Uint32, hk.modifers));
-			cfg.insertKey("HotkeySlot", slotEntry);
-
-			if(hk.action.type == CLIENT_HOTKEY_ACTION_TEXT && hk.action.text.text && !hk.action.text.text->empty())
-			{
-				std::string entry;
-				entry += std::to_string(SDL_static_cast(Sint32, hk.keycode));
-				entry += '|';
-				entry += std::to_string(SDL_static_cast(Uint32, hk.modifers));
-				entry += '|';
-				entry += *hk.action.text.text;
-				entry += '|';
-				entry += (hk.action.text.sendAutomatically ? "yes" : "no");
-				cfg.insertKey("HotkeyAction", entry);
-			}
-			else if(hk.action.type >= CLIENT_HOTKEY_ACTION_USEITEM &&
-				hk.action.type <= CLIENT_HOTKEY_ACTION_WITHCROSSHAIRS &&
-				hk.action.item.itemId != 0)
-			{
-				std::string entry;
-				entry += std::to_string(SDL_static_cast(Sint32, hk.keycode));
-				entry += '|';
-				entry += std::to_string(SDL_static_cast(Uint32, hk.modifers));
-				entry += '|';
-				entry += std::to_string(SDL_static_cast(Uint32, hk.action.item.itemId));
-				entry += '|';
-				entry += std::to_string(SDL_static_cast(Uint32, hk.action.item.itemSubtype));
-				entry += '|';
-				entry += std::to_string(SDL_static_cast(Uint32, hk.action.item.usageType));
-				cfg.insertKey("HotkeyItem", entry);
-			}
-		}
 	}
 }
 
@@ -1035,6 +1011,9 @@ void Engine::run()
 
 	UTIL_createMainWindow();
 	resetToDefaultHotkeys(m_wasdWalking);
+	// Custom actions are loaded after the default movement bindings so a
+	// saved key can never be silently replaced during startup.
+	loadHotkeys();
 }
 
 void Engine::terminate()
@@ -2498,14 +2477,23 @@ void Engine::onLMouseUp(Sint32 x, Sint32 y)
 				}
 			}
 
+			bool itemSelected = false;
 			if(itemui)
+			{
 				bindHotkeyItem(m_pendingHotkeyItemKey, m_pendingHotkeyItemModifiers,
 					itemui->getID(), itemui->getItemSubtype(), CLIENT_HOTKEY_ACTION_WITHCROSSHAIRS);
+				itemSelected = true;
+			}
 			else if(item)
+			{
 				bindHotkeyItem(m_pendingHotkeyItemKey, m_pendingHotkeyItemModifiers,
 					item->getID(), item->getItemSubtype(), CLIENT_HOTKEY_ACTION_WITHCROSSHAIRS);
+				itemSelected = true;
+			}
 			else
 				g_game.processTextMessage(MessageFailure, "Select an item or rune for the hotkey.");
+			if(itemSelected)
+				saveHotkeys();
 
 			m_pendingHotkeyItemKey = SDLK_UNKNOWN;
 			m_pendingHotkeyItemModifiers = KMOD_NONE;

@@ -21,9 +21,22 @@
 
 #include "GUI_ListBox.h"
 #include "../engine.h"
+#include "../thingManager.h"
+#include "../GUI/itemUI.h"
 
 extern Engine g_engine;
+extern ThingManager g_thingManager;
 extern Uint32 g_frameTime;
+
+namespace
+{
+	enum ListBoxIconType : Uint8
+	{
+		LISTBOX_ICON_NONE = 0,
+		LISTBOX_ICON_ITEM,
+		LISTBOX_ICON_CREATURE
+	};
+}
 
 GUI_ListBox::GUI_ListBox(iRect boxRect, Uint32 internalID) : m_scrollBar(iRect(0, 0, 0, 0), 0, 0)
 {
@@ -34,6 +47,10 @@ GUI_ListBox::GUI_ListBox(iRect boxRect, Uint32 internalID) : m_scrollBar(iRect(0
 GUI_ListBox::~GUI_ListBox()
 {
 	m_listBox.clear();
+	m_iconTypes.clear();
+	m_iconIds.clear();
+	m_iconColors.clear();
+	m_itemIcons.clear();
 }
 
 void GUI_ListBox::setEventCallback(void (*eventHandlerFunction)(Uint32, Sint32), Uint32 mEvent)
@@ -54,7 +71,7 @@ void GUI_ListBox::setRect(iRect& NewRect)
 	// before the bottom. Use the exact drawable row count; the former formula
 	// overestimated some heights by one and made the final list entry impossible
 	// to scroll into view.
-	m_maxDisplay = UTIL_max<Sint32>(1, (m_tRect.y2 - 6) / 12);
+	m_maxDisplay = UTIL_max<Sint32>(1, (m_tRect.y2 - 6) / m_rowHeight);
 	m_scrollBar.setScrollSize(SDL_static_cast(Sint32, m_listBox.size()) - m_maxDisplay);
 }
 
@@ -70,6 +87,40 @@ void GUI_ListBox::setSelect(Sint32 select)
 void GUI_ListBox::add(const std::string data)
 {
 	m_listBox.push_back(std::move(data));
+	m_iconTypes.push_back(LISTBOX_ICON_NONE);
+	m_iconIds.push_back(0);
+	m_iconColors.push_back(0);
+	m_itemIcons.emplace_back();
+	m_scrollBar.setScrollSize(SDL_static_cast(Sint32, m_listBox.size()) - m_maxDisplay);
+}
+
+void GUI_ListBox::addItem(const std::string data, Uint16 itemId)
+{
+	if(m_rowHeight != 32)
+	{
+		m_rowHeight = 32;
+		m_maxDisplay = UTIL_max<Sint32>(1, (m_tRect.y2 - 6) / m_rowHeight);
+	}
+	m_listBox.push_back(std::move(data));
+	m_iconTypes.push_back(LISTBOX_ICON_ITEM);
+	m_iconIds.push_back(itemId);
+	m_iconColors.push_back(0);
+	m_itemIcons.emplace_back(ItemUI::createItemUI(itemId, 1));
+	m_scrollBar.setScrollSize(SDL_static_cast(Sint32, m_listBox.size()) - m_maxDisplay);
+}
+
+void GUI_ListBox::addCreature(const std::string data, Uint16 lookType, Uint32 outfitColor)
+{
+	if(m_rowHeight != 32)
+	{
+		m_rowHeight = 32;
+		m_maxDisplay = UTIL_max<Sint32>(1, (m_tRect.y2 - 6) / m_rowHeight);
+	}
+	m_listBox.push_back(std::move(data));
+	m_iconTypes.push_back(LISTBOX_ICON_CREATURE);
+	m_iconIds.push_back(lookType);
+	m_iconColors.push_back(outfitColor);
+	m_itemIcons.emplace_back();
 	m_scrollBar.setScrollSize(SDL_static_cast(Sint32, m_listBox.size()) - m_maxDisplay);
 }
 
@@ -87,8 +138,24 @@ void GUI_ListBox::erase(Sint32 select)
 	if(SDL_static_cast(size_t, select) < m_listBox.size())
 	{
 		m_listBox.erase(m_listBox.begin() + select);
+		m_iconTypes.erase(m_iconTypes.begin() + select);
+		m_iconIds.erase(m_iconIds.begin() + select);
+		m_iconColors.erase(m_iconColors.begin() + select);
+		m_itemIcons.erase(m_itemIcons.begin() + select);
 		m_scrollBar.setScrollSize(SDL_static_cast(Sint32, m_listBox.size()) - m_maxDisplay);
 	}
+}
+
+void GUI_ListBox::clear()
+{
+	m_listBox.clear();
+	m_iconTypes.clear();
+	m_iconIds.clear();
+	m_iconColors.clear();
+	m_itemIcons.clear();
+	m_select = -1;
+	m_scrollBar.setScrollPos(0);
+	m_scrollBar.setScrollSize(0);
 }
 
 void GUI_ListBox::onKeyDown(SDL_Event& event)
@@ -142,7 +209,7 @@ void GUI_ListBox::onLMouseDown(Sint32 x, Sint32 y)
 			if(posY > endY)
 				break;
 
-			rect = iRect(m_tRect.x1 + 2, posY, m_tRect.x2 - 16, 12);
+			rect = iRect(m_tRect.x1 + 2, posY, m_tRect.x2 - 16, m_rowHeight);
 			if(rect.isPointInside(x, y))
 			{
 				if(g_frameTime < m_lastClick && m_select == count)
@@ -155,7 +222,7 @@ void GUI_ListBox::onLMouseDown(Sint32 x, Sint32 y)
 				return;
 			}
 
-			posY += 12;
+			posY += m_rowHeight;
 			++count;
 			++it;
 		}
@@ -210,15 +277,45 @@ void GUI_ListBox::render()
 		if(posY > endY)
 			break;
 
+		const size_t row = SDL_static_cast(size_t, count);
 		if(count++ == m_select)
 		{
-			renderer->fillRectangle(m_tRect.x1 + 2, posY, m_tRect.x2 - 16, 12, 112, 112, 112, 255);
-			g_engine.drawFont(CLIENT_FONT_NONOUTLINED, m_tRect.x1 + 3, posY + 1, (*it), 255, 255, 255, CLIENT_FONT_ALIGN_LEFT);
+			renderer->fillRectangle(m_tRect.x1 + 2, posY, m_tRect.x2 - 16, m_rowHeight, 112, 112, 112, 255);
 		}
-		else
-			g_engine.drawFont(CLIENT_FONT_NONOUTLINED, m_tRect.x1 + 3, posY + 1, (*it), 175, 175, 175, CLIENT_FONT_ALIGN_LEFT);
 
-		posY += 12;
+		Sint32 textX = m_tRect.x1 + 3;
+		if(row < m_iconTypes.size() && m_iconTypes[row] != LISTBOX_ICON_NONE)
+		{
+			textX += 31;
+			if(m_iconTypes[row] == LISTBOX_ICON_ITEM && row < m_itemIcons.size() && m_itemIcons[row])
+				m_itemIcons[row]->render(m_tRect.x1 + 3, posY, 28);
+			else if(m_iconTypes[row] == LISTBOX_ICON_CREATURE && m_iconIds[row] != 0)
+			{
+				ThingType* type = g_thingManager.getThingType(ThingCategory_Creature, m_iconIds[row]);
+				if(type)
+				{
+					Uint32 sprite = type->getSprite(ThingFrameGroup_Idle, 0, 0, 0, DIRECTION_SOUTH, 0, 0, 0);
+					if(sprite != 0)
+					{
+						if(type->m_frameGroup[ThingFrameGroup_Idle].m_layers > 1)
+						{
+							Uint32 mask = type->getSprite(ThingFrameGroup_Idle, 0, 0, 1, DIRECTION_SOUTH, 0, 0, 0);
+							if(mask != 0)
+								renderer->drawSpriteMask(sprite, mask, m_tRect.x1 + 3, posY, 28, 28, 0, 0, 32, 32, m_iconColors[row]);
+							else
+								renderer->drawSprite(sprite, m_tRect.x1 + 3, posY, 28, 28, 0, 0, 32, 32);
+						}
+						else
+							renderer->drawSprite(sprite, m_tRect.x1 + 3, posY, 28, 28, 0, 0, 32, 32);
+					}
+				}
+			}
+		}
+
+		const Uint8 color = (SDL_static_cast(Sint32, row) == m_select ? 255 : 175);
+		g_engine.drawFont(CLIENT_FONT_NONOUTLINED, textX, posY + (m_rowHeight - 10) / 2, (*it), color, color, color, CLIENT_FONT_ALIGN_LEFT);
+
+		posY += m_rowHeight;
 		++it;
 	}
 	renderer->disableClipRect();
